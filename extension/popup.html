@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roko</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+
+      body {
+        width: 320px;
+        min-height: 400px;
+        max-height: 600px;
+        overflow-y: auto;
+        background: #09090b;
+        color: #e4e4e7;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 14px;
+        border-bottom: 1px solid #27272a;
+        background: #18181b;
+      }
+      header h1 { font-size: 15px; font-weight: 700; flex: 1 }
+      header span { font-size: 18px }
+
+      #lock-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #71717a;
+        font-size: 16px;
+        padding: 2px 4px;
+        border-radius: 4px;
+        transition: color 0.15s;
+      }
+      #lock-btn:hover { color: #ef4444 }
+
+      main { padding: 12px 14px }
+
+      /* ── Unlock screen ── */
+      #unlock-screen h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px }
+      #unlock-form input, #create-form input {
+        display: block;
+        width: 100%;
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 8px;
+        color: #e4e4e7;
+        padding: 8px 10px;
+        font-size: 13px;
+        outline: none;
+        margin-bottom: 8px;
+        transition: border-color 0.15s;
+      }
+      #unlock-form input:focus, #create-form input:focus { border-color: #6366f1 }
+
+      /* ── Buttons ── */
+      .btn-primary {
+        width: 100%;
+        background: #4f46e5;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        margin-top: 4px;
+      }
+      .btn-primary:hover { background: #4338ca }
+      .btn-primary:disabled { opacity: 0.5; cursor: default }
+
+      .btn-ghost {
+        background: none;
+        border: 1px solid #3f3f46;
+        color: #a1a1aa;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .btn-ghost:hover { background: #27272a; color: #e4e4e7 }
+
+      /* ── Error ── */
+      .error {
+        background: #450a0a;
+        color: #fca5a5;
+        border-radius: 6px;
+        padding: 7px 10px;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      /* ── Toggle mode ── */
+      #toggle-mode {
+        display: block;
+        text-align: center;
+        margin-top: 10px;
+        font-size: 11px;
+        color: #52525b;
+        background: none;
+        border: none;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      #toggle-mode:hover { color: #a1a1aa }
+
+      /* ── Vault list ── */
+      #vault-screen h2 {
+        font-size: 11px;
+        font-weight: 500;
+        color: #71717a;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      #search-input {
+        display: block;
+        width: 100%;
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 8px;
+        color: #e4e4e7;
+        padding: 7px 10px;
+        font-size: 12px;
+        outline: none;
+        margin-bottom: 10px;
+        transition: border-color 0.15s;
+      }
+      #search-input:focus { border-color: #6366f1 }
+
+      .entry-card {
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        position: relative;
+      }
+      .entry-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+      .entry-username { color: #71717a; font-size: 11px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+      .entry-actions { display: flex; gap: 4px; margin-top: 7px }
+      .entry-actions button {
+        flex: 1;
+        background: #27272a;
+        border: none;
+        color: #a1a1aa;
+        border-radius: 6px;
+        padding: 5px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+      }
+      .entry-actions button:hover { background: #3f3f46; color: #e4e4e7 }
+      .entry-actions .fill-btn:hover { background: #312e81; color: #c7d2fe }
+
+      #add-btn {
+        display: block;
+        width: 100%;
+        background: none;
+        border: 1px dashed #3f3f46;
+        color: #52525b;
+        border-radius: 10px;
+        padding: 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 4px;
+        transition: border-color 0.15s, color 0.15s;
+      }
+      #add-btn:hover { border-color: #6366f1; color: #818cf8 }
+
+      #empty-state { text-align: center; padding: 30px 0; color: #52525b }
+      #empty-state .icon { font-size: 32px; margin-bottom: 8px }
+
+      /* ── Add entry panel ── */
+      #add-panel { display: none }
+      #add-panel h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px }
+      #add-panel input {
+        display: block;
+        width: 100%;
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 8px;
+        color: #e4e4e7;
+        padding: 7px 10px;
+        font-size: 12px;
+        outline: none;
+        margin-bottom: 6px;
+        transition: border-color 0.15s;
+      }
+      #add-panel input:focus { border-color: #6366f1 }
+      .form-row { display: flex; gap: 6px; margin-top: 4px }
+
+      /* ── Copied toast ── */
+      #copied-toast {
+        display: none;
+        position: fixed;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #16a34a;
+        color: #fff;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      /* ── Spinner ── */
+      .spinner {
+        width: 20px; height: 20px;
+        border: 2px solid #3f3f46;
+        border-top-color: #6366f1;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        margin: 40px auto;
+      }
+      @keyframes spin { to { transform: rotate(360deg) } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span>🔐</span>
+      <h1>Roko</h1>
+      <button id="lock-btn" title="Lock vault" style="display:none">🔒</button>
+    </header>
+
+    <main>
+      <!-- Loading -->
+      <div id="loading-screen">
+        <div class="spinner"></div>
+      </div>
+
+      <!-- Unlock / Create -->
+      <div id="unlock-screen" style="display:none">
+        <div id="create-form" style="display:none">
+          <h2>Create a new vault</h2>
+          <div id="create-error" class="error" style="display:none"></div>
+          <input id="create-password" type="password" placeholder="Master password (min 8 chars)" autocomplete="new-password" />
+          <input id="create-confirm" type="password" placeholder="Confirm master password" autocomplete="new-password" />
+          <button id="create-submit" class="btn-primary">Create vault</button>
+        </div>
+        <div id="unlock-form">
+          <h2>Unlock your vault</h2>
+          <div id="unlock-error" class="error" style="display:none"></div>
+          <input id="unlock-password" type="password" placeholder="Master password" autocomplete="current-password" />
+          <button id="unlock-submit" class="btn-primary">Unlock</button>
+        </div>
+        <button id="toggle-mode" type="button"></button>
+      </div>
+
+      <!-- Vault list -->
+      <div id="vault-screen" style="display:none">
+        <input id="search-input" type="search" placeholder="Search…" />
+        <h2 id="list-heading">All credentials</h2>
+        <div id="entries-list"></div>
+        <div id="empty-state" style="display:none">
+          <div class="icon">🔑</div>
+          <p>No credentials yet</p>
+        </div>
+        <button id="add-btn" type="button">+ Add credential</button>
+      </div>
+
+      <!-- Add entry panel -->
+      <div id="add-panel">
+        <h2>Add credential</h2>
+        <div id="add-error" class="error" style="display:none"></div>
+        <input id="add-title" type="text" placeholder="Title (e.g. GitHub)" />
+        <input id="add-url" type="url" placeholder="Website URL (optional)" />
+        <input id="add-username" type="text" placeholder="Username or email" autocomplete="off" />
+        <input id="add-password" type="password" placeholder="Password" autocomplete="new-password" />
+        <div class="form-row">
+          <button id="add-cancel" class="btn-ghost">Cancel</button>
+          <button id="add-save" class="btn-primary" style="margin-top:0">Save</button>
+        </div>
+      </div>
+    </main>
+
+    <div id="copied-toast">Copied!</div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
