@@ -134,6 +134,40 @@ export function generatePassword(opts: PasswordOptions): string {
   return result.join('')
 }
 
+/**
+ * Wrap (encrypt) a CryptoKey using another AES-GCM key.
+ * Used to protect the vault key with the recovery-phrase-derived key.
+ */
+export async function wrapKey(
+  keyToWrap: CryptoKey,
+  wrappingKey: CryptoKey,
+): Promise<{ iv: string; wrappedKey: string }> {
+  const raw = await crypto.subtle.exportKey('raw', keyToWrap)
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const wrapped = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrappingKey, raw)
+  return { iv: ab2b64(iv.buffer as ArrayBuffer), wrappedKey: ab2b64(wrapped) }
+}
+
+/**
+ * Unwrap (decrypt) a wrapped key blob back into a usable CryptoKey.
+ * Throws if the wrapping key is wrong (DOMException: OperationError).
+ */
+export async function unwrapKey(
+  wrappedKeyB64: string,
+  ivB64: string,
+  wrappingKey: CryptoKey,
+): Promise<CryptoKey> {
+  const raw = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: b642ab(ivB64) },
+    wrappingKey,
+    b642ab(wrappedKeyB64),
+  )
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM', length: 256 }, true, [
+    'encrypt',
+    'decrypt',
+  ])
+}
+
 /** Simple strength score 0–4. */
 export function passwordStrength(pw: string): { score: number; label: string } {
   let score = 0

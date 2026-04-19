@@ -81,3 +81,78 @@ export async function saveVault(
 export async function deleteLocalVault(): Promise<void> {
   await idbDelete('vault')
 }
+
+// ─── File System Access API (with <input type=file> fallback) ─────────────────
+
+const FILE_OPTS = {
+  description: 'RokoPW Vault',
+  accept: { 'application/json': ['.rkpw', '.json'] },
+} as const
+
+/**
+ * Save an encrypted vault to the local file system.
+ * Uses the File System Access API in supporting browsers (Chrome, Edge, Brave)
+ * and falls back to a programmatic anchor-click download in others (Firefox).
+ */
+export async function exportVaultToFile(vault: EncryptedVault): Promise<void> {
+  const json = JSON.stringify(vault, null, 2)
+
+  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+    // File System Access API
+    const handle = await (
+      window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> }
+    ).showSaveFilePicker({
+      suggestedName: 'roko-vault.rkpw',
+      types: [{ description: FILE_OPTS.description, accept: FILE_OPTS.accept }],
+    })
+    const writable = await handle.createWritable()
+    await writable.write(json)
+    await writable.close()
+  } else {
+    // Fallback: trigger a browser download
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'roko-vault.rkpw'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+}
+
+/**
+ * Open an encrypted vault from the local file system.
+ * Throws `DOMException (AbortError)` if the user cancels — callers should swallow that.
+ */
+export async function importVaultFromFile(): Promise<EncryptedVault> {
+  if (typeof window !== 'undefined' && 'showOpenFilePicker' in window) {
+    const [handle] = await (
+      window as Window & { showOpenFilePicker: (o: unknown) => Promise<FileSystemFileHandle[]> }
+    ).showOpenFilePicker({
+      types: [{ description: FILE_OPTS.description, accept: FILE_OPTS.accept }],
+      multiple: false,
+    })
+    const file = await handle.getFile()
+    return JSON.parse(await file.text()) as EncryptedVault
+  }
+
+  // Fallback: hidden <input type="file">
+  return new Promise<EncryptedVault>((resolve, reject) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.rkpw,.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) { reject(new DOMException('No file selected', 'AbortError')); return }
+      try {
+        resolve(JSON.parse(await file.text()) as EncryptedVault)
+      } catch {
+        reject(new Error('Invalid vault file — could not parse JSON.'))
+      }
+    }
+    input.oncancel = () => reject(new DOMException('Cancelled', 'AbortError'))
+    input.click()
+  })
+}

@@ -1,16 +1,34 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, type FormEvent } from 'react'
 import type { VaultEntry } from '@/lib/types'
 import { useVault } from './VaultProvider'
 import { CredentialCard } from './CredentialCard'
 import { CredentialForm } from './CredentialForm'
 import { PasswordGenerator } from './PasswordGenerator'
+import { RecoveryPhraseDisplay } from './RecoveryPhraseDisplay'
 
 type Panel = 'none' | 'add' | 'edit' | 'settings' | 'generator'
 
 export function VaultDashboard() {
-  const { entries, lock, addEntry, updateEntry, deleteEntry, settings, applySettings } = useVault()
+  const {
+    entries,
+    lock,
+    addEntry,
+    updateEntry,
+    deleteEntry,
+    settings,
+    applySettings,
+    exportToFile,
+    setupRecovery,
+    clearRecoveryPhrase,
+    recoveryPhrase,
+    hasRecovery,
+    needsNewPassword,
+    changeMasterPassword,
+    error,
+    clearError,
+  } = useVault()
   const [query, setQuery] = useState('')
   const [panel, setPanel] = useState<Panel>('none')
   const [editing, setEditing] = useState<VaultEntry | null>(null)
@@ -64,7 +82,12 @@ export function VaultDashboard() {
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
           <span className="text-xl">🔐</span>
-          <span className="font-bold tracking-tight">Roko</span>
+          <span className="font-bold tracking-tight">
+            Roko
+            <span className="bg-linear-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
+              PW
+            </span>
+          </span>
 
           {/* Search */}
           <div className="relative flex-1">
@@ -75,7 +98,7 @@ export function VaultDashboard() {
               placeholder="Search credentials…"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-1.5 pl-8 pr-3 text-sm text-white placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             />
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
               🔍
             </span>
           </div>
@@ -119,27 +142,35 @@ export function VaultDashboard() {
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
         {/* ── Slide-in panels ── */}
         {panel === 'add' && (
-          <Panel title="Add credential" onClose={closePanel}>
+          <SlidePanel title="Add credential" onClose={closePanel}>
             <CredentialForm onSave={handleAdd} onCancel={closePanel} />
-          </Panel>
+          </SlidePanel>
         )}
 
         {panel === 'edit' && editing && (
-          <Panel title="Edit credential" onClose={closePanel}>
+          <SlidePanel title="Edit credential" onClose={closePanel}>
             <CredentialForm initial={editing} onSave={handleUpdate} onCancel={closePanel} />
-          </Panel>
+          </SlidePanel>
         )}
 
         {panel === 'generator' && (
-          <Panel title="Password generator" onClose={closePanel}>
+          <SlidePanel title="Password generator" onClose={closePanel}>
             <PasswordGenerator />
-          </Panel>
+          </SlidePanel>
         )}
 
         {panel === 'settings' && (
-          <Panel title="Settings" onClose={closePanel}>
-            <SettingsPanel settings={settings} onApply={applySettings} />
-          </Panel>
+          <SlidePanel title="Settings" onClose={closePanel}>
+            <SettingsPanel
+              settings={settings}
+              onApply={applySettings}
+              onExport={exportToFile}
+              onSetupRecovery={setupRecovery}
+              hasRecovery={hasRecovery}
+              error={error}
+              clearError={clearError}
+            />
+          </SlidePanel>
         )}
 
         {/* ── Credential list ── */}
@@ -162,20 +193,33 @@ export function VaultDashboard() {
           )}
         </div>
 
-        {/* Entry count */}
         {entries.length > 0 && (
           <p className="mt-6 text-center text-xs text-zinc-600">
             {entries.length} credential{entries.length !== 1 ? 's' : ''} · encrypted with AES-256-GCM
           </p>
         )}
       </main>
+
+      {/* ── Recovery phrase display modal ── */}
+      {recoveryPhrase && (
+        <Modal>
+          <RecoveryPhraseDisplay words={recoveryPhrase} onConfirmed={clearRecoveryPhrase} />
+        </Modal>
+      )}
+
+      {/* ── Set new password modal (after phrase recovery) ── */}
+      {needsNewPassword && !recoveryPhrase && (
+        <Modal>
+          <SetNewPasswordForm onSave={changeMasterPassword} />
+        </Modal>
+      )}
     </div>
   )
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-function Panel({
+function SlidePanel({
   title,
   onClose,
   children,
@@ -202,6 +246,99 @@ function Panel({
   )
 }
 
+function Modal({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SetNewPasswordForm({ onSave }: { onSave: (pw: string) => Promise<void> }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [localError, setLocalError] = useState('')
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setLocalError('')
+    if (password.length < 8) {
+      setLocalError('Password must be at least 8 characters.')
+      return
+    }
+    if (password !== confirm) {
+      setLocalError('Passwords do not match.')
+      return
+    }
+    setLoading(true)
+    try {
+      await onSave(password)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="font-semibold text-white">Set a new master password</h3>
+        <p className="mt-1 text-xs text-zinc-500">
+          Your vault has been recovered. Create a new master password to protect it.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="new-pw">
+            New master password
+          </label>
+          <input
+            id="new-pw"
+            type="password"
+            autoFocus
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+            required
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="new-pw-confirm">
+            Confirm password
+          </label>
+          <input
+            id="new-pw-confirm"
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Re-enter new password"
+            required
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        {localError && (
+          <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{localError}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+        >
+          {loading ? 'Saving…' : 'Set new password'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
 function EmptyState({ hasEntries, onAdd }: { hasEntries: boolean; onAdd: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 py-20 text-center">
@@ -211,9 +348,7 @@ function EmptyState({ hasEntries, onAdd }: { hasEntries: boolean; onAdd: () => v
       </p>
       {!hasEntries && (
         <>
-          <p className="text-sm text-zinc-500">
-            Add your first credential to get started.
-          </p>
+          <p className="text-sm text-zinc-500">Add your first credential to get started.</p>
           <button
             type="button"
             onClick={onAdd}
@@ -230,12 +365,24 @@ function EmptyState({ hasEntries, onAdd }: { hasEntries: boolean; onAdd: () => v
 function SettingsPanel({
   settings,
   onApply,
+  onExport,
+  onSetupRecovery,
+  hasRecovery,
+  error,
+  clearError,
 }: {
   settings: ReturnType<typeof useVault>['settings']
   onApply: ReturnType<typeof useVault>['applySettings']
+  onExport: () => Promise<void>
+  onSetupRecovery: () => Promise<void>
+  hasRecovery: boolean
+  error: string | null
+  clearError: () => void
 }) {
   const [vaultIdInput, setVaultIdInput] = useState(settings.vaultId)
   const [saved, setSaved] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
 
   const save = async () => {
     await onApply({ backend: settings.backend, vaultId: vaultIdInput })
@@ -243,12 +390,23 @@ function SettingsPanel({
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const exportVault = () => {
-    const raw = localStorage.getItem('roko-settings')
-    const a = document.createElement('a')
-    a.href = `data:application/json,${encodeURIComponent(JSON.stringify({ settings: raw ? JSON.parse(raw) : settings }))}`
-    a.download = 'roko-settings.json'
-    a.click()
+  const handleExport = async () => {
+    setExportLoading(true)
+    try {
+      await onExport()
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  const handleSetupRecovery = async () => {
+    clearError()
+    setRecoveryLoading(true)
+    try {
+      await onSetupRecovery()
+    } finally {
+      setRecoveryLoading(false)
+    }
   }
 
   return (
@@ -279,7 +437,7 @@ function SettingsPanel({
         </p>
       </div>
 
-      {/* Vault ID (for remote sync / cross-device) */}
+      {/* Vault ID */}
       <div>
         <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="vaultId">
           Vault ID{' '}
@@ -302,16 +460,57 @@ function SettingsPanel({
         </div>
       </div>
 
-      {/* Export */}
+      {/* Export vault to file */}
       <div>
-        <p className="mb-2 text-xs font-medium text-zinc-400">Export settings</p>
+        <p className="mb-1 text-xs font-medium text-zinc-400">Portable backup</p>
+        <p className="mb-2 text-xs text-zinc-600">
+          Save a copy of your encrypted vault as a <span className="font-mono">.rkpw</span> file.
+          You can store it on a USB drive and open it on any device.
+        </p>
         <button
           type="button"
-          onClick={exportVault}
-          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+          onClick={handleExport}
+          disabled={exportLoading}
+          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50"
         >
-          Download settings.json
+          {exportLoading ? 'Saving…' : '💾 Export vault to file'}
         </button>
+      </div>
+
+      {/* Recovery phrase */}
+      <div>
+        <p className="mb-1 text-xs font-medium text-zinc-400">Recovery phrase</p>
+        <div className="mb-2 flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+              hasRecovery
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'bg-amber-500/15 text-amber-400'
+            }`}
+          >
+            {hasRecovery ? '✓ Recovery enabled' : '⚠ No recovery set up'}
+          </span>
+        </div>
+        <p className="mb-2 text-xs text-zinc-600">
+          {hasRecovery
+            ? 'Your vault can be recovered using your 12-word phrase. Generate a new one to rotate it.'
+            : 'Without a recovery phrase, a forgotten master password means permanent loss of access.'}
+        </p>
+        <button
+          type="button"
+          onClick={handleSetupRecovery}
+          disabled={recoveryLoading}
+          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50"
+        >
+          {recoveryLoading
+            ? 'Generating…'
+            : hasRecovery
+              ? '🔄 Rotate recovery phrase'
+              : '🛡 Set up recovery phrase'}
+        </button>
+        {error && (
+          <p className="mt-2 rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{error}</p>
+        )}
       </div>
 
       <p className="rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-500">

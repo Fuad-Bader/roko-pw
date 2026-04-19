@@ -9,11 +9,19 @@ export interface VaultEntry {
   updatedAt: number
 }
 
+/** Recovery blob: the raw vault key wrapped with a key derived from the recovery phrase. */
+export interface VaultRecovery {
+  salt: string       // PBKDF2 salt for deriving the recovery key from the mnemonic
+  iv: string         // AES-GCM IV used when wrapping the vault key
+  wrappedKey: string // raw 256-bit vault key encrypted with the recovery key
+}
+
 export interface EncryptedVault {
   version: 1
-  salt: string       // base64-encoded 32-byte random salt (per-vault)
-  iv: string         // base64-encoded 12-byte AES-GCM IV (per-save)
-  ciphertext: string // base64-encoded AES-256-GCM ciphertext
+  salt: string        // base64-encoded 32-byte random salt (per-vault)
+  iv: string          // base64-encoded 12-byte AES-GCM IV (per-save)
+  ciphertext: string  // base64-encoded AES-256-GCM ciphertext of the entries
+  recovery?: VaultRecovery
 }
 
 export type StorageBackend = 'local' | 'remote'

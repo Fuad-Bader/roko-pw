@@ -3,14 +3,9 @@
   "name": "Roko – Zero-Trust Password Manager",
   "version": "1.0.0",
   "description": "Autofill passwords from your AES-256-GCM encrypted vault. The master password never leaves your device.",
-  "icons": {
-    "16":  "icons/icon16.png",
-    "48":  "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Roko Password Manager"
+    "default_title": "RokoPW – Password Manager"
   },
   "background": {
     "service_worker": "background.js",
