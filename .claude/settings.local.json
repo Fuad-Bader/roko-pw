@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm install *)",
+      "Bash(npx electron-vite *)",
+      "Bash(kill %1)",
+      "Bash(echo 'const {app} = require\\(\"electron\"\\); console.log\\(\"app:\", typeof app\\); app.whenReady\\(\\).then\\(\\(\\) => { console.log\\(\"ready\"\\); process.exit\\(0\\); }\\);')",
+      "Bash(node_modules/electron/dist/electron.exe /tmp/test-electron.js)",
+      "Bash(echo 'console.log\\(\"electron version:\", process.versions.electron\\); process.exit\\(0\\);')",
+      "Bash(node_modules/electron/dist/electron.exe /tmp/check-electron.cjs)",
+      "Bash(node_modules/electron/dist/electron.exe out/main/test.cjs)",
+      "Bash(node_modules/electron/dist/electron.exe .)",
+      "Bash(unset ELECTRON_RUN_AS_NODE)"
     ]
   }
 }

@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { useVault } from './VaultProvider'
 import { RecoverVault } from './RecoverVault'
+import { ServerLogin } from './ServerLogin'
+import type { VaultMeta } from '@/lib/types'
 
-type Mode = 'unlock' | 'create' | 'recover'
+type Mode = 'unlock' | 'create' | 'recover' | 'server'
 
 export function UnlockScreen() {
   const {
@@ -16,6 +18,8 @@ export function UnlockScreen() {
     clearError,
     settings,
     applySettings,
+    serverSession,
+    logoutServer,
   } = useVault()
   const [mode, setMode] = useState<Mode>(status === 'empty' ? 'create' : 'unlock')
   const [password, setPassword] = useState('')
@@ -24,7 +28,7 @@ export function UnlockScreen() {
   const [importLoading, setImportLoading] = useState(false)
   const [localError, setLocalError] = useState('')
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLocalError('')
     clearError()
@@ -72,6 +76,12 @@ export function UnlockScreen() {
     }
   }
 
+  // Called when user picks a vault from the server browser
+  const handleVaultSelected = async (vault: VaultMeta) => {
+    await applySettings({ backend: 'remote', vaultId: vault.id, serverUrl: settings.serverUrl })
+    switchMode(vault.id ? 'unlock' : 'create')
+  }
+
   const displayError = localError || error
 
   const logo = (
@@ -89,6 +99,8 @@ export function UnlockScreen() {
     </div>
   )
 
+  // ── Recovery mode ─────────────────────────────────────────────────────────
+
   if (mode === 'recover') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
@@ -102,10 +114,57 @@ export function UnlockScreen() {
     )
   }
 
+  // ── Server connect / vault picker ─────────────────────────────────────────
+
+  if (mode === 'server') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+        <div className="w-full max-w-sm">
+          {logo}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+            <ServerLogin
+              onVaultSelected={handleVaultSelected}
+              onCancel={() => switchMode(status === 'empty' ? 'create' : 'unlock')}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Unlock / Create ───────────────────────────────────────────────────────
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
       <div className="w-full max-w-sm">
         {logo}
+
+        {/* Server banner when connected */}
+        {serverSession && settings.backend === 'remote' && (
+          <div className="mb-2 flex items-center justify-between rounded-xl border border-indigo-900/50 bg-indigo-950/40 px-3 py-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs text-indigo-400">🌐</span>
+              <span className="truncate text-xs text-indigo-300">{serverSession.serverUrl}</span>
+            </div>
+            <div className="flex items-center gap-2 ml-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => switchMode('server')}
+                className="text-xs text-indigo-400 hover:text-indigo-200"
+              >
+                Switch vault
+              </button>
+              <span className="text-zinc-700">·</span>
+              <button
+                type="button"
+                onClick={logoutServer}
+                className="text-xs text-zinc-500 hover:text-zinc-300"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Main card */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
@@ -116,7 +175,7 @@ export function UnlockScreen() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="password">
-                Master password
+                {settings.backend === 'remote' ? 'Vault password' : 'Master password'}
               </label>
               <input
                 id="password"
@@ -125,7 +184,7 @@ export function UnlockScreen() {
                 autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter master password"
+                placeholder={`Enter ${settings.backend === 'remote' ? 'vault' : 'master'} password`}
                 required
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
@@ -142,7 +201,7 @@ export function UnlockScreen() {
                   autoComplete="new-password"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="Re-enter master password"
+                  placeholder="Re-enter password"
                   required
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 />
@@ -190,45 +249,27 @@ export function UnlockScreen() {
           </div>
         </div>
 
-        {/* Open from file */}
-        <button
-          type="button"
-          onClick={handleImport}
-          disabled={importLoading}
-          className="mt-3 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50"
-        >
-          {importLoading ? 'Opening…' : '📂 Open vault from file'}
-        </button>
-
-        {/* Storage backend toggle */}
-        <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="mb-2 text-xs font-medium text-zinc-400">Storage backend</p>
-          <div className="flex gap-2">
-            {(['local', 'remote'] as const).map((b) => (
-              <button
-                key={b}
-                type="button"
-                onClick={() => applySettings({ backend: b })}
-                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                  settings.backend === b
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                }`}
-              >
-                {b === 'local' ? '💾 Local' : '☁️ Remote'}
-              </button>
-            ))}
-          </div>
-          {settings.backend === 'remote' && (
-            <p className="mt-2 break-all text-xs text-zinc-500">
-              Vault ID:{' '}
-              <span className="font-mono text-zinc-300">{settings.vaultId}</span>
-            </p>
-          )}
+        {/* Action row: file + server */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={importLoading}
+            className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {importLoading ? 'Opening…' : '📂 Open from file'}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode('server')}
+            className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800"
+          >
+            🌐 {serverSession ? 'Switch server' : 'Connect to server'}
+          </button>
         </div>
 
         <p className="mt-4 text-center text-xs text-zinc-600">
-          All encryption happens in your browser. The server never sees your passwords.
+          All encryption happens locally. The server never sees your passwords.
         </p>
       </div>
     </div>

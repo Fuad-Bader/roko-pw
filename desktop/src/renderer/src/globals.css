@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@source "../../../../app/**/*.tsx";
+@source "../../../../app/**/*.ts";
+@source "../../../../lib/**/*.ts";
+@source "./**/*.tsx";
+@source "./**/*.ts";
+
+@theme inline {
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #09090b;
+  color: white;
+  /* Prevent text selection on UI chrome */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Re-enable text selection for inputs and content areas */
+input,
+textarea,
+[data-selectable] {
+  -webkit-user-select: text;
+  user-select: text;
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, type FormEvent } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { VaultEntry } from '@/lib/types'
 import { useVault } from './VaultProvider'
 import { CredentialCard } from './CredentialCard'
@@ -262,7 +262,7 @@ function SetNewPasswordForm({ onSave }: { onSave: (pw: string) => Promise<void> 
   const [loading, setLoading] = useState(false)
   const [localError, setLocalError] = useState('')
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLocalError('')
     if (password.length < 8) {

@@ -1,0 +1,13 @@
+services:
+  roko-server:
+    build: .
+    ports:
+      - "4567:4567"
+    volumes:
+      - roko-data:/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  roko-data:

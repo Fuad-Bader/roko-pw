@@ -28,7 +28,26 @@ export type StorageBackend = 'local' | 'remote'
 
 export interface VaultSettings {
   backend: StorageBackend
-  vaultId: string // UUID, identifies vault on the remote server
+  vaultId: string  // UUID, identifies vault on the remote server
+  serverUrl: string  // Base URL of self-hosted server, e.g. "https://vault.example.com"
+}
+
+/** Active authenticated session against a self-hosted server. Stored in localStorage. */
+export interface ServerSession {
+  serverUrl: string
+  token: string
+  userId: string
+  email: string
+  expiresAt: number
+}
+
+/** Vault metadata returned by GET /api/vaults. */
+export interface VaultMeta {
+  id: string
+  name: string
+  role: 'owner' | 'member'
+  member_count: number
+  updated_at: number
 }
 
 export type VaultStatus = 'checking' | 'empty' | 'locked' | 'unlocked'
