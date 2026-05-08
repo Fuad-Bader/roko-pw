@@ -12,7 +12,7 @@ function createWindow(): void {
     minHeight: 520,
     show: false,
     autoHideMenuBar: true,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     backgroundColor: '#09090b',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -74,6 +74,19 @@ ipcMain.handle('vault:export', async (_event, vault: unknown) => {
   writeFileSync(filePath, JSON.stringify(vault, null, 2), 'utf-8')
   return true
 })
+
+// ─── IPC: Window controls ─────────────────────────────────────────────────────
+
+ipcMain.handle('window:minimize', (e) => e.sender.getOwnerBrowserWindow()?.minimize())
+ipcMain.handle('window:maximize', (e) => {
+  const win = e.sender.getOwnerBrowserWindow()
+  if (!win) return
+  win.isMaximized() ? win.unmaximize() : win.maximize()
+})
+ipcMain.handle('window:close', (e) => e.sender.getOwnerBrowserWindow()?.close())
+ipcMain.handle('window:isMaximized', (e) => e.sender.getOwnerBrowserWindow()?.isMaximized() ?? false)
+
+// ─── IPC: Vault storage ───────────────────────────────────────────────────────
 
 ipcMain.handle('vault:import', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({

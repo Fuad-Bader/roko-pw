@@ -1,14 +1,15 @@
 import { useVault, VaultProvider } from '@components/VaultProvider'
 import { UnlockScreen } from '@components/UnlockScreen'
 import { VaultDashboard } from '@components/VaultDashboard'
+import { TitleBar } from './components/TitleBar'
 
 function VaultApp() {
   const { status } = useVault()
 
   if (status === 'checking') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+      <div className="flex flex-1 items-center justify-center bg-primary">
+        <div className="size-10 animate-spin rounded-full border-2 border-border-primary border-t-brand-solid" />
       </div>
     )
   }
@@ -20,7 +21,12 @@ function VaultApp() {
 export function App() {
   return (
     <VaultProvider>
-      <VaultApp />
+      <div className="flex h-screen flex-col overflow-hidden">
+        <TitleBar />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <VaultApp />
+        </div>
+      </div>
     </VaultProvider>
   )
 }

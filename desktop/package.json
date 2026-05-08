@@ -23,14 +23,17 @@
     "electron-builder": "^25.1.7",
     "electron-vite": "^2.3.0",
     "react": "^19.2.4",
+    "react-aria-components": "^1.17.0",
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.0.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss-react-aria-components": "^2.1.0",
     "typescript": "^5.7.0"
   },
   "build": {
     "appId": "com.rokopw.desktop",
     "productName": "RokoPW",
-    "copyright": "Copyright © 2025",
+    "copyright": "Copyright © 2026",
     "directories": {
       "output": "dist",
       "buildResources": "resources"

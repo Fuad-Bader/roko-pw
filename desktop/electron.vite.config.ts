@@ -41,7 +41,7 @@ export default defineConfig({
           replacement: resolve('./src/renderer/src/lib/storage.ts'),
         },
         { find: '@/lib', replacement: resolve('../lib') },
-        { find: '@/', replacement: resolve('../') },
+        { find: '@/', replacement: resolve('../') + '/' },
         // Resolve app components from the Next.js app directory
         { find: '@components', replacement: resolve('../app/components') },
       ],

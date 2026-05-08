@@ -13,4 +13,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   importVault: (): Promise<EncryptedVault | null> =>
     ipcRenderer.invoke('vault:import'),
+
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+  },
 })

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react'
 import type { VaultEntry } from '@/lib/types'
+import { Button } from '@/components/base/buttons/button'
 import { PasswordGenerator } from './PasswordGenerator'
 
 interface Props {
@@ -9,6 +10,11 @@ interface Props {
   onSave: (data: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
   onCancel: () => void
 }
+
+const inputCls =
+  'w-full rounded-lg border border-border-primary bg-tertiary px-3 py-2 text-sm text-primary placeholder:text-placeholder outline-none transition focus:border-border-brand focus:ring-1 focus:ring-brand'
+
+const labelCls = 'mb-1 block text-xs font-medium text-tertiary'
 
 export function CredentialForm({ initial, onSave, onCancel }: Props) {
   const [title, setTitle] = useState(initial?.title ?? '')
@@ -37,34 +43,30 @@ export function CredentialForm({ initial, onSave, onCancel }: Props) {
     }
   }
 
-  const inputClass =
-    'w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
-  const labelClass = 'mb-1 block text-xs font-medium text-zinc-400'
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className={labelClass} htmlFor="cf-title">Title *</label>
-        <input id="cf-title" className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. GitHub" autoFocus />
+        <label className={labelCls} htmlFor="cf-title">Title *</label>
+        <input id="cf-title" className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. GitHub" autoFocus />
       </div>
 
       <div>
-        <label className={labelClass} htmlFor="cf-url">Website URL</label>
-        <input id="cf-url" className={inputClass} type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://github.com" />
+        <label className={labelCls} htmlFor="cf-url">Website URL</label>
+        <input id="cf-url" className={inputCls} type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://github.com" />
       </div>
 
       <div>
-        <label className={labelClass} htmlFor="cf-username">Username / Email *</label>
-        <input id="cf-username" className={inputClass} autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="you@example.com" />
+        <label className={labelCls} htmlFor="cf-username">Username / Email *</label>
+        <input id="cf-username" className={inputCls} autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="you@example.com" />
       </div>
 
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <label className={labelClass} htmlFor="cf-password">Password *</label>
+          <label className={labelCls} htmlFor="cf-password">Password *</label>
           <button
             type="button"
             onClick={() => setShowGenerator((v) => !v)}
-            className="text-xs text-indigo-400 hover:text-indigo-300"
+            className="text-xs text-brand-400 hover:text-brand-300 transition"
           >
             {showGenerator ? 'Hide generator' : '✨ Generate'}
           </button>
@@ -73,7 +75,7 @@ export function CredentialForm({ initial, onSave, onCancel }: Props) {
           <input
             id="cf-password"
             type={showPassword ? 'text' : 'password'}
-            className={`${inputClass} pr-10`}
+            className={`${inputCls} pr-10`}
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -82,7 +84,7 @@ export function CredentialForm({ initial, onSave, onCancel }: Props) {
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-tertiary transition hover:text-primary"
             tabIndex={-1}
           >
             {showPassword ? '🙈' : '👁️'}
@@ -90,41 +92,48 @@ export function CredentialForm({ initial, onSave, onCancel }: Props) {
         </div>
 
         {showGenerator && (
-          <div className="mt-2 rounded-lg border border-zinc-700 bg-zinc-800 p-3">
+          <div className="mt-2 rounded-lg border border-border-primary bg-tertiary p-3">
             <PasswordGenerator onSelect={(pw) => { setPassword(pw); setShowGenerator(false) }} />
           </div>
         )}
       </div>
 
       <div>
-        <label className={labelClass} htmlFor="cf-notes">Notes</label>
+        <label className={labelCls} htmlFor="cf-notes">Notes</label>
         <textarea
           id="cf-notes"
           rows={2}
-          className={inputClass}
+          className={inputCls}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Optional notes (stored encrypted)"
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{error}</p>}
+      {error && (
+        <p className="rounded-lg bg-error-primary px-3 py-2 text-xs text-error-primary">{error}</p>
+      )}
 
       <div className="flex gap-2 pt-1">
-        <button
+        <Button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+          color="secondary"
+          size="sm"
+          className="flex-1"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          disabled={saving}
-          className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+          isDisabled={saving}
+          isLoading={saving}
+          color="primary"
+          size="sm"
+          className="flex-1"
         >
-          {saving ? 'Saving…' : initial ? 'Update' : 'Add credential'}
-        </button>
+          {initial ? 'Update' : 'Add credential'}
+        </Button>
       </div>
     </form>
   )

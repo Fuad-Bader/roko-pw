@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useVault } from './VaultProvider'
 import type { VaultMeta } from '@/lib/types'
+import { Button } from '@/components/base/buttons/button'
 
 type Step = 'url' | 'email' | 'otp' | 'vaults'
 
@@ -10,6 +11,9 @@ interface Props {
   onVaultSelected: (vault: VaultMeta) => void
   onCancel: () => void
 }
+
+const inputCls =
+  'w-full rounded-lg border border-border-primary bg-tertiary px-3 py-2 text-sm text-primary placeholder:text-placeholder outline-none transition focus:border-border-brand focus:ring-1 focus:ring-brand'
 
 export function ServerLogin({ onVaultSelected, onCancel }: Props) {
   const {
@@ -43,8 +47,6 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
     clearError()
   }
 
-  // ── Step 1: Probe server URL ───────────────────────────────────────────────
-
   const handleProbeUrl = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     clearErrors()
@@ -63,8 +65,6 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
     }
   }
 
-  // ── Step 2: Request OTP ───────────────────────────────────────────────────
-
   const handleRequestOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     clearErrors()
@@ -74,8 +74,6 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
     } catch { /* error shown via context */ }
   }
 
-  // ── Step 3: Verify OTP ────────────────────────────────────────────────────
-
   const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     clearErrors()
@@ -84,8 +82,6 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
       setStep('vaults')
     } catch { /* error shown via context */ }
   }
-
-  // ── Step 4: Select vault ──────────────────────────────────────────────────
 
   const handleCreateVault = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -102,26 +98,25 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
     }
   }
 
-  // ── Shared header ─────────────────────────────────────────────────────────
+  const STEPS: Step[] = ['url', 'email', 'otp', 'vaults']
+  const currentStepIdx = STEPS.indexOf(step)
 
   const header = (
     <div className="mb-6">
-      <div className="mb-1 flex items-center gap-2 text-sm text-zinc-400">
-        <span className="size-5 rounded bg-indigo-600/20 text-center text-xs leading-5 text-indigo-400">
+      <div className="mb-1 flex items-center gap-2 text-sm text-tertiary">
+        <span className="size-5 rounded bg-brand-solid/20 text-center text-xs leading-5 text-brand-400">
           🌐
         </span>
-        <span className="font-medium text-zinc-300">
+        <span className="font-medium text-secondary">
           {serverName || serverSession?.serverUrl || 'Connect to server'}
         </span>
       </div>
       <div className="flex gap-2">
-        {(['url', 'email', 'otp', 'vaults'] as Step[]).map((s, i) => (
+        {STEPS.map((s, i) => (
           <div
             key={s}
             className={`h-0.5 flex-1 rounded-full transition-colors ${
-              ['url', 'email', 'otp', 'vaults'].indexOf(step) >= i
-                ? 'bg-indigo-500'
-                : 'bg-zinc-700'
+              currentStepIdx >= i ? 'bg-brand-solid' : 'bg-border-primary'
             }`}
           />
         ))}
@@ -129,13 +124,11 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
     </div>
   )
 
-  // ── Step 1 UI ─────────────────────────────────────────────────────────────
-
   if (step === 'url') {
     return (
       <div>
         {header}
-        <h3 className="mb-4 text-sm font-semibold text-white">Enter server URL</h3>
+        <h3 className="mb-4 text-sm font-semibold text-primary">Enter server URL</h3>
         <form onSubmit={handleProbeUrl} className="space-y-3">
           <input
             type="url"
@@ -144,40 +137,37 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
             value={serverUrl}
             onChange={(e) => setServerUrl(e.target.value)}
             required
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className={inputCls}
           />
           {displayError && (
-            <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{displayError}</p>
+            <p className="rounded-lg bg-error-primary px-3 py-2 text-xs text-error-primary">{displayError}</p>
           )}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800"
-            >
+            <Button type="button" onClick={onCancel} color="secondary" size="sm" className="flex-1">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={probing}
-              className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              isDisabled={probing}
+              isLoading={probing}
+              color="primary"
+              size="sm"
+              className="flex-1"
             >
-              {probing ? 'Connecting…' : 'Connect'}
-            </button>
+              Connect
+            </Button>
           </div>
         </form>
       </div>
     )
   }
 
-  // ── Step 2 UI ─────────────────────────────────────────────────────────────
-
   if (step === 'email') {
     return (
       <div>
         {header}
-        <h3 className="mb-1 text-sm font-semibold text-white">Sign in with your email</h3>
-        <p className="mb-4 text-xs text-zinc-500">
+        <h3 className="mb-1 text-sm font-semibold text-primary">Sign in with your email</h3>
+        <p className="mb-4 text-xs text-quaternary">
           We&apos;ll send a one-time login code to your inbox.
         </p>
         <form onSubmit={handleRequestOtp} className="space-y-3">
@@ -188,41 +178,44 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className={inputCls}
           />
           {displayError && (
-            <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{displayError}</p>
+            <p className="rounded-lg bg-error-primary px-3 py-2 text-xs text-error-primary">{displayError}</p>
           )}
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => { clearErrors(); setStep('url') }}
-              className="flex-1 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800"
+              color="secondary"
+              size="sm"
+              className="flex-1"
             >
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={serverLoading}
-              className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              isDisabled={serverLoading}
+              isLoading={serverLoading}
+              color="primary"
+              size="sm"
+              className="flex-1"
             >
-              {serverLoading ? 'Sending…' : 'Send code'}
-            </button>
+              Send code
+            </Button>
           </div>
         </form>
       </div>
     )
   }
 
-  // ── Step 3 UI ─────────────────────────────────────────────────────────────
-
   if (step === 'otp') {
     return (
       <div>
         {header}
-        <h3 className="mb-1 text-sm font-semibold text-white">Enter your login code</h3>
-        <p className="mb-4 text-xs text-zinc-500">
-          Check <span className="text-zinc-300">{email}</span> for your 6-digit code.
+        <h3 className="mb-1 text-sm font-semibold text-primary">Enter your login code</h3>
+        <p className="mb-4 text-xs text-quaternary">
+          Check <span className="text-secondary">{email}</span> for your 6-digit code.
         </p>
         <form onSubmit={handleVerifyOtp} className="space-y-3">
           <input
@@ -235,31 +228,36 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
             required
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-center font-mono text-xl tracking-[.5rem] text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className={`${inputCls} text-center font-mono text-xl tracking-[.5rem] placeholder:tracking-normal`}
           />
           {displayError && (
-            <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{displayError}</p>
+            <p className="rounded-lg bg-error-primary px-3 py-2 text-xs text-error-primary">{displayError}</p>
           )}
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => { clearErrors(); setOtp(''); setStep('email') }}
-              className="flex-1 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800"
+              color="secondary"
+              size="sm"
+              className="flex-1"
             >
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={serverLoading || otp.length !== 6}
-              className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              isDisabled={serverLoading || otp.length !== 6}
+              isLoading={serverLoading}
+              color="primary"
+              size="sm"
+              className="flex-1"
             >
-              {serverLoading ? 'Verifying…' : 'Verify'}
-            </button>
+              Verify
+            </Button>
           </div>
           <button
             type="button"
             onClick={() => { clearErrors(); requestOtp(serverUrl, email).catch(() => {}) }}
-            className="w-full text-xs text-zinc-600 hover:text-zinc-400"
+            className="w-full text-xs text-quaternary transition hover:text-tertiary"
           >
             Resend code
           </button>
@@ -268,24 +266,22 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
     )
   }
 
-  // ── Step 4: Vault list ────────────────────────────────────────────────────
-
   return (
     <div>
       {header}
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Choose a vault</h3>
+        <h3 className="text-sm font-semibold text-primary">Choose a vault</h3>
         <button
           type="button"
           onClick={() => { refreshServerVaults().catch(() => {}); clearErrors() }}
-          className="text-xs text-zinc-500 hover:text-zinc-300"
+          className="text-xs text-quaternary transition hover:text-tertiary"
         >
           ↺ Refresh
         </button>
       </div>
 
       {serverVaults.length === 0 && !serverLoading && (
-        <p className="mb-3 text-xs text-zinc-500">No vaults yet. Create one below.</p>
+        <p className="mb-3 text-xs text-quaternary">No vaults yet. Create one below.</p>
       )}
 
       <div className="mb-3 space-y-1.5">
@@ -294,16 +290,16 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
             key={v.id}
             type="button"
             onClick={() => onVaultSelected(v)}
-            className="flex w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-left transition hover:border-indigo-500 hover:bg-zinc-700"
+            className="flex w-full items-center justify-between rounded-lg border border-border-primary bg-tertiary px-3 py-2.5 text-left transition hover:border-border-brand hover:bg-secondary_hover"
           >
             <div>
-              <p className="text-sm font-medium text-white">{v.name}</p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-sm font-medium text-primary">{v.name}</p>
+              <p className="text-xs text-quaternary">
                 {v.role === 'owner' ? 'Owner' : 'Member'} ·{' '}
                 {v.member_count} member{v.member_count !== 1 ? 's' : ''}
               </p>
             </div>
-            <span className="text-zinc-500">›</span>
+            <span className="text-tertiary">›</span>
           </button>
         ))}
       </div>
@@ -316,33 +312,38 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
             placeholder="Vault name"
             value={newVaultName}
             onChange={(e) => setNewVaultName(e.target.value)}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className={inputCls}
           />
           {displayError && (
-            <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-400">{displayError}</p>
+            <p className="rounded-lg bg-error-primary px-3 py-2 text-xs text-error-primary">{displayError}</p>
           )}
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => { setShowNewVault(false); clearErrors() }}
-              className="flex-1 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800"
+              color="secondary"
+              size="sm"
+              className="flex-1"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={creatingVault}
-              className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              isDisabled={creatingVault}
+              isLoading={creatingVault}
+              color="primary"
+              size="sm"
+              className="flex-1"
             >
-              {creatingVault ? 'Creating…' : 'Create'}
-            </button>
+              Create
+            </Button>
           </div>
         </form>
       ) : (
         <button
           type="button"
           onClick={() => setShowNewVault(true)}
-          className="w-full rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+          className="w-full rounded-lg border border-dashed border-border-primary px-3 py-2 text-sm text-quaternary transition hover:border-border-brand hover:text-tertiary"
         >
           + New vault
         </button>
@@ -351,7 +352,7 @@ export function ServerLogin({ onVaultSelected, onCancel }: Props) {
       <button
         type="button"
         onClick={onCancel}
-        className="mt-3 w-full text-xs text-zinc-600 hover:text-zinc-400"
+        className="mt-3 w-full text-xs text-quaternary transition hover:text-tertiary"
       >
         Cancel
       </button>

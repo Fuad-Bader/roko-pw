@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { VaultProvider } from "./components/VaultProvider";
+import { ThemeProvider } from "./components/ThemeProvider";
 
-const jakartaSans = Plus_Jakarta_Sans({
-  variable: "--font-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -29,10 +30,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${jakartaSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      data-accent="violet"
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <VaultProvider>{children}</VaultProvider>
+      <body className="min-h-full flex flex-col bg-primary text-primary">
+        <ThemeProvider>
+          <VaultProvider>{children}</VaultProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

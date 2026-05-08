@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { VaultEntry } from '@/lib/types'
+import { Eye, EyeOff, Copy01, Pencil01, Trash01 } from '@untitledui/icons'
 
 interface Props {
   entry: VaultEntry
@@ -9,7 +10,7 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+function CopyBtn({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
     await navigator.clipboard.writeText(text)
@@ -21,9 +22,23 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       type="button"
       onClick={copy}
       title={`Copy ${label}`}
-      className="rounded px-1.5 py-0.5 text-xs text-zinc-400 transition hover:bg-zinc-700 hover:text-white"
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        border: 0,
+        background: 'transparent',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: copied ? 'var(--color-brand-600)' : 'var(--color-fg-quaternary)',
+        transition: 'color 0.1s, background 0.1s',
+        fontSize: 12,
+        fontWeight: 600,
+      }}
     >
-      {copied ? <span className="text-green-400">✓</span> : '📋'}
+      {copied ? '✓' : <Copy01 size={13} />}
     </button>
   )
 }
@@ -34,82 +49,239 @@ export function CredentialCard({ entry, onEdit, onDelete }: Props) {
   const favicon = entry.url
     ? `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(entry.url)}`
     : null
+  const initials = entry.title.slice(0, 2).toUpperCase()
 
   return (
-    <div className="group rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700">
-      {/* Header row */}
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+    <div
+      style={{
+        border: '1px solid var(--color-border-secondary)',
+        borderRadius: 12,
+        background: 'var(--color-bg-primary)',
+        overflow: 'hidden',
+        transition: 'border-color 0.12s, box-shadow 0.12s',
+      }}
+      onMouseEnter={(e) => {
+        ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border-primary)'
+        ;(e.currentTarget as HTMLElement).style.boxShadow = '0 1px 2px 0 rgba(16,24,40,.05)'
+      }}
+      onMouseLeave={(e) => {
+        ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border-secondary)'
+        ;(e.currentTarget as HTMLElement).style.boxShadow = 'none'
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '14px 16px 10px',
+        }}
+      >
+        <span
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: 'var(--color-bg-brand-solid)',
+            color: '#fff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 12,
+            fontWeight: 700,
+            flexShrink: 0,
+            overflow: 'hidden',
+          }}
+        >
           {favicon ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={favicon}
               alt=""
-              width={16}
-              height={16}
-              className="size-4 shrink-0 rounded"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+              width={20}
+              height={20}
+              onError={(e) => {
+                ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+              }}
             />
           ) : (
-            <span className="text-base">🔑</span>
+            initials
           )}
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-white">{entry.title}</p>
-            {entry.url && (
-              <p className="truncate text-xs text-zinc-500">{entry.url}</p>
-            )}
-          </div>
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p
+            style={{
+              margin: 0,
+              fontWeight: 600,
+              fontSize: 14,
+              color: 'var(--color-text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {entry.title}
+          </p>
+          {entry.url && (
+            <p
+              style={{
+                margin: 0,
+                fontSize: 12,
+                color: 'var(--color-text-tertiary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {entry.url}
+            </p>
+          )}
         </div>
-
-        {/* Action buttons (visible on hover) */}
-        <div className="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100">
+        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
           <button
             type="button"
             onClick={() => onEdit(entry)}
             title="Edit"
-            className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-white"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: '1px solid var(--color-border-secondary)',
+              background: 'var(--color-bg-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-fg-quaternary)',
+            }}
           >
-            ✏️
+            <Pencil01 size={13} />
           </button>
           <button
             type="button"
             onClick={() => onDelete(entry.id)}
             title="Delete"
-            className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: '1px solid var(--color-border-secondary)',
+              background: 'var(--color-bg-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-fg-error-primary)',
+            }}
           >
-            🗑️
+            <Trash01 size={13} />
           </button>
         </div>
       </div>
 
-      {/* Username row */}
-      <div className="flex items-center gap-1">
-        <span className="w-16 shrink-0 text-xs text-zinc-500">Username</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">
-          {entry.username}
-        </span>
-        <CopyButton text={entry.username} label="username" />
-      </div>
+      {/* Fields */}
+      <div
+        style={{
+          borderTop: '1px solid var(--color-border-secondary)',
+          padding: '8px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+        }}
+      >
+        {/* Username */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              width: 56,
+              fontSize: 11,
+              color: 'var(--color-text-tertiary)',
+              fontWeight: 500,
+              flexShrink: 0,
+            }}
+          >
+            Username
+          </span>
+          <span
+            style={{
+              flex: 1,
+              fontSize: 12,
+              fontFamily: 'var(--font-mono, monospace)',
+              color: 'var(--color-text-secondary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+          >
+            {entry.username}
+          </span>
+          <CopyBtn text={entry.username} label="username" />
+        </div>
 
-      {/* Password row */}
-      <div className="mt-1 flex items-center gap-1">
-        <span className="w-16 shrink-0 text-xs text-zinc-500">Password</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">
-          {showPassword ? entry.password : '••••••••••••'}
-        </span>
-        <button
-          type="button"
-          onClick={() => setShowPassword((v) => !v)}
-          title={showPassword ? 'Hide password' : 'Show password'}
-          className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-white"
-        >
-          {showPassword ? '🙈' : '👁️'}
-        </button>
-        <CopyButton text={entry.password} label="password" />
+        {/* Password */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              width: 56,
+              fontSize: 11,
+              color: 'var(--color-text-tertiary)',
+              fontWeight: 500,
+              flexShrink: 0,
+            }}
+          >
+            Password
+          </span>
+          <span
+            style={{
+              flex: 1,
+              fontSize: 12,
+              fontFamily: 'var(--font-mono, monospace)',
+              color: 'var(--color-text-secondary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+          >
+            {showPassword ? entry.password : '••••••••••••'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            title={showPassword ? 'Hide' : 'Show'}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: 0,
+              background: 'transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-fg-quaternary)',
+            }}
+          >
+            {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
+          <CopyBtn text={entry.password} label="password" />
+        </div>
       </div>
 
       {entry.notes && (
-        <p className="mt-2 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-400">{entry.notes}</p>
+        <div
+          style={{
+            borderTop: '1px solid var(--color-border-secondary)',
+            padding: '8px 16px 12px',
+            fontSize: 12,
+            color: 'var(--color-text-tertiary)',
+            lineHeight: '18px',
+          }}
+        >
+          {entry.notes}
+        </div>
       )}
     </div>
   )

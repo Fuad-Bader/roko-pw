@@ -11,7 +11,13 @@
       "Bash(node_modules/electron/dist/electron.exe /tmp/check-electron.cjs)",
       "Bash(node_modules/electron/dist/electron.exe out/main/test.cjs)",
       "Bash(node_modules/electron/dist/electron.exe .)",
-      "Bash(unset ELECTRON_RUN_AS_NODE)"
+      "Bash(unset ELECTRON_RUN_AS_NODE)",
+      "WebFetch(domain:www.untitledui.com)",
+      "Bash(npm run *)",
+      "Bash(node -e \"const { resolve } = require\\('path'\\); console.log\\(resolve\\('../'\\)\\)\")",
+      "Bash(node -e \"require\\('react-aria-components'\\); console.log\\('ok'\\)\")",
+      "WebFetch(domain:api.anthropic.com)",
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\FuadBader\\\\.claude\\\\projects\\\\c--Users-FuadBader-Documents-Github-RokoPW-roko-pw\\\\614b4ca3-c960-4104-9b5d-caf7381e25fb\\\\tool-results\\\\wireframes.html\" -Raw; $lines = $content -split \"`n\"; Write-Output \"Total lines: $\\($lines.Count\\)\")"
     ]
   }
 }

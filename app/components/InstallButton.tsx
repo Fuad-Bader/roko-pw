@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/base/buttons/button'
+import { ModalOverlay, Modal, Dialog } from '@/components/application/modals/modal'
 
 type Browser = 'chrome' | 'edge' | 'brave' | 'opera' | 'arc' | 'firefox' | 'other'
 
@@ -10,9 +12,7 @@ function detectBrowser(): Browser {
 
   if (ua.includes('Edg/')) return 'edge'
   if (ua.includes('OPR/') || ua.includes('Opera/')) return 'opera'
-  // Brave exposes a global flag
   if ((navigator as unknown as { brave?: { isBrave?: () => boolean } }).brave?.isBrave) return 'brave'
-  // Arc sets a CSS variable — cheapest reliable detection
   if (getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-title').trim())
     return 'arc'
   if (ua.includes('Firefox/')) return 'firefox'
@@ -41,7 +41,6 @@ const BROWSER_META: Record<Browser, { label: string; icon: React.ReactNode; chro
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden fill="none">
         <path d="M21 12.5c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.49 0 4.74 1.01 6.37 2.63" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-        <path d="M3.5 14.5c1.5 3 4.5 5 8.5 5 3 0 5.5-1.5 7-4" stroke="#0078D4" strokeWidth="0" fill="none"/>
         <path fillRule="evenodd" clipRule="evenodd" d="M12 4a8.5 8.5 0 0 1 7.77 5H10a3 3 0 0 0 0 6h8.48A8.5 8.5 0 1 1 12 4Z" fill="#0078D4"/>
         <path d="M18 15H10a3 3 0 0 1 0-6h9.77c.15.64.23 1.31.23 2a8.46 8.46 0 0 1-.52 3H18Z" fill="#50E6FF" opacity=".5"/>
       </svg>
@@ -101,81 +100,57 @@ const BROWSER_META: Record<Browser, { label: string; icon: React.ReactNode; chro
   },
 }
 
-// ─── Install instructions modal ───────────────────────────────────────────────
-
-function Modal({ browser, onClose }: { browser: Browser; onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null)
+function InstallModal({ browser, onClose }: { browser: Browser; onClose: () => void }) {
   const meta = BROWSER_META[browser]
 
-  // Close on outside click
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
-
-  // Close on Escape
-  useEffect(() => {
-    function handler(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
   const chromiumSteps = [
-    <>Open <strong className="text-white">{meta.label.replace('Add to ', '')}</strong> and navigate to <code className="rounded bg-zinc-800 px-1 text-indigo-300">chrome://extensions</code></>,
-    <>Enable <strong className="text-white">Developer mode</strong> using the toggle in the top-right corner</>,
-    <>Click <strong className="text-white">Load unpacked</strong> and select the <code className="rounded bg-zinc-800 px-1 text-indigo-300">extension/</code> folder from this project</>,
-    <>The <strong className="text-white">Roko</strong> icon will appear in your toolbar — click it to get started</>,
+    <>Open <strong className="text-primary">{meta.label.replace('Add to ', '')}</strong> and navigate to <code className="rounded bg-tertiary px-1 text-brand-400">chrome://extensions</code></>,
+    <>Enable <strong className="text-primary">Developer mode</strong> using the toggle in the top-right corner</>,
+    <>Click <strong className="text-primary">Load unpacked</strong> and select the <code className="rounded bg-tertiary px-1 text-brand-400">extension/</code> folder from this project</>,
+    <>The <strong className="text-primary">Roko</strong> icon will appear in your toolbar — click it to get started</>,
   ]
 
   const firefoxSteps = [
-    <>Open Firefox and navigate to <code className="rounded bg-zinc-800 px-1 text-indigo-300">about:debugging#/runtime/this-firefox</code></>,
-    <>Click <strong className="text-white">Load Temporary Add-on…</strong></>,
-    <>Select the <code className="rounded bg-zinc-800 px-1 text-indigo-300">extension/manifest.json</code> file from this project</>,
-    <>The <strong className="text-white">Roko</strong> icon will appear in your toolbar</>,
+    <>Open Firefox and navigate to <code className="rounded bg-tertiary px-1 text-brand-400">about:debugging#/runtime/this-firefox</code></>,
+    <>Click <strong className="text-primary">Load Temporary Add-on…</strong></>,
+    <>Select the <code className="rounded bg-tertiary px-1 text-brand-400">extension/manifest.json</code> file from this project</>,
+    <>The <strong className="text-primary">Roko</strong> icon will appear in your toolbar</>,
   ]
 
   const steps = meta.chromium ? chromiumSteps : firefoxSteps
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div
-        ref={ref}
-        className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl"
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Install {meta.label.replace('Add to ', '')} Extension</h3>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-white"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-
-        <ol className="space-y-3">
-          {steps.map((step, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-                {i + 1}
-              </span>
-              <p className="text-sm leading-relaxed text-zinc-400">{step}</p>
-            </li>
-          ))}
-        </ol>
-
-        <p className="mt-5 rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-500">
-          The extension will be published to browser stores soon. For now, load it in developer mode.
-        </p>
+    <div className="w-full max-w-md rounded-2xl border border-border-primary bg-secondary p-6 shadow-2xl">
+      <div className="mb-5 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-primary">
+          Install {meta.label.replace('Add to ', '')} Extension
+        </h3>
+        <button
+          onClick={onClose}
+          className="text-tertiary transition hover:text-primary"
+          aria-label="Close"
+        >
+          ✕
+        </button>
       </div>
+
+      <ol className="space-y-3">
+        {steps.map((step, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-solid text-xs font-bold text-white">
+              {i + 1}
+            </span>
+            <p className="text-sm leading-relaxed text-tertiary">{step}</p>
+          </li>
+        ))}
+      </ol>
+
+      <p className="mt-5 rounded-lg bg-tertiary px-3 py-2 text-xs text-quaternary">
+        The extension will be published to browser stores soon. For now, load it in developer mode.
+      </p>
     </div>
   )
 }
-
-// ─── Public component ─────────────────────────────────────────────────────────
 
 interface Props {
   size?: 'sm' | 'lg'
@@ -189,18 +164,25 @@ export function InstallButton({ size = 'lg' }: Props) {
 
   const meta = BROWSER_META[browser]
 
-  const cls =
-    size === 'lg'
-      ? 'flex items-center gap-2.5 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-zinc-900 shadow-lg transition hover:bg-zinc-100 active:scale-95'
-      : 'flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-100 active:scale-95'
-
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={cls}>
+      <Button
+        type="button"
+        onClick={() => setOpen(true)}
+        color="primary"
+        size={size === 'lg' ? 'md' : 'sm'}
+      >
         {meta.icon}
         {meta.label}
-      </button>
-      {open && <Modal browser={browser} onClose={() => setOpen(false)} />}
+      </Button>
+
+      <ModalOverlay isOpen={open} onOpenChange={setOpen} isDismissable>
+        <Modal>
+          <Dialog>
+            <InstallModal browser={browser} onClose={() => setOpen(false)} />
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
     </>
   )
 }

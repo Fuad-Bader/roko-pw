@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { generatePassword, passwordStrength } from '@/lib/crypto'
 import type { PasswordOptions } from '@/lib/types'
+import { Button } from '@/components/base/buttons/button'
 
-const STRENGTH_COLORS = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500']
+const STRENGTH_COLORS = [
+  'bg-error-solid',
+  'bg-warning-solid',
+  'bg-warning-solid',
+  'bg-brand-solid',
+  'bg-success-solid',
+]
 
 interface Props {
   onSelect?: (pw: string) => void
@@ -38,20 +45,20 @@ export function PasswordGenerator({ onSelect }: Props) {
   return (
     <div className="space-y-3">
       {/* Generated password display */}
-      <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2">
-        <span className="flex-1 break-all font-mono text-sm text-white">{password}</span>
+      <div className="flex items-center gap-2 rounded-lg border border-border-primary bg-tertiary px-3 py-2">
+        <span className="flex-1 break-all font-mono text-sm text-primary">{password}</span>
         <button
           type="button"
           onClick={copy}
-          className="shrink-0 text-xs text-zinc-400 hover:text-white"
+          className="shrink-0 text-xs text-tertiary transition hover:text-primary"
           title="Copy to clipboard"
         >
-          {copied ? '✓' : '📋'}
+          {copied ? <span className="text-success-primary">✓</span> : '📋'}
         </button>
         <button
           type="button"
           onClick={regenerate}
-          className="shrink-0 text-xs text-zinc-400 hover:text-white"
+          className="shrink-0 text-xs text-tertiary transition hover:text-primary"
           title="Regenerate"
         >
           🔄
@@ -65,19 +72,19 @@ export function PasswordGenerator({ onSelect }: Props) {
             <div
               key={i}
               className={`h-1 flex-1 rounded-full transition-colors ${
-                i < strength.score ? STRENGTH_COLORS[strength.score - 1] : 'bg-zinc-700'
+                i < strength.score ? STRENGTH_COLORS[strength.score - 1] : 'bg-quaternary'
               }`}
             />
           ))}
         </div>
-        <p className="text-xs text-zinc-500">{strength.label}</p>
+        <p className="text-xs text-quaternary">{strength.label}</p>
       </div>
 
       {/* Length slider */}
       <div>
-        <div className="mb-1 flex justify-between text-xs text-zinc-400">
+        <div className="mb-1 flex justify-between text-xs text-tertiary">
           <span>Length</span>
-          <span className="font-mono text-white">{opts.length}</span>
+          <span className="font-mono text-primary">{opts.length}</span>
         </div>
         <input
           type="range"
@@ -85,7 +92,7 @@ export function PasswordGenerator({ onSelect }: Props) {
           max={64}
           value={opts.length}
           onChange={(e) => setOpts((o) => ({ ...o, length: Number(e.target.value) }))}
-          className="w-full accent-indigo-500"
+          className="w-full accent-brand-500"
         />
       </div>
 
@@ -104,8 +111,8 @@ export function PasswordGenerator({ onSelect }: Props) {
             onClick={() => setOpts((o) => ({ ...o, [key]: !o[key] }))}
             className={`rounded px-2 py-0.5 text-xs font-medium transition ${
               opts[key]
-                ? 'bg-indigo-600 text-white'
-                : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+                ? 'bg-brand-solid text-white'
+                : 'bg-quaternary text-tertiary hover:bg-tertiary'
             }`}
           >
             {label}
@@ -114,13 +121,15 @@ export function PasswordGenerator({ onSelect }: Props) {
       </div>
 
       {onSelect && (
-        <button
+        <Button
           type="button"
           onClick={() => onSelect(password)}
-          className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+          color="primary"
+          size="sm"
+          className="w-full"
         >
           Use this password
-        </button>
+        </Button>
       )}
     </div>
   )

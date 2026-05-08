@@ -11,7 +11,7 @@ function createWindow() {
     minHeight: 520,
     show: false,
     autoHideMenuBar: true,
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     backgroundColor: "#09090b",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -63,6 +63,14 @@ electron.ipcMain.handle("vault:export", async (_event, vault) => {
   fs.writeFileSync(filePath, JSON.stringify(vault, null, 2), "utf-8");
   return true;
 });
+electron.ipcMain.handle("window:minimize", (e) => e.sender.getOwnerBrowserWindow()?.minimize());
+electron.ipcMain.handle("window:maximize", (e) => {
+  const win = e.sender.getOwnerBrowserWindow();
+  if (!win) return;
+  win.isMaximized() ? win.unmaximize() : win.maximize();
+});
+electron.ipcMain.handle("window:close", (e) => e.sender.getOwnerBrowserWindow()?.close());
+electron.ipcMain.handle("window:isMaximized", (e) => e.sender.getOwnerBrowserWindow()?.isMaximized() ?? false);
 electron.ipcMain.handle("vault:import", async () => {
   const { canceled, filePaths } = await electron.dialog.showOpenDialog({
     title: "Open RokoPW Vault",
