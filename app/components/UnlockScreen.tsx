@@ -127,8 +127,8 @@ export function UnlockScreen() {
   const handleImport = async () => {
     setImportLoading(true)
     try {
-      await importFromFile()
-      switchMode('unlock')
+      const success = await importFromFile()
+      if (success) switchMode('unlock')
     } finally {
       setImportLoading(false)
     }

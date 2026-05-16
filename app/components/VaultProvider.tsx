@@ -64,7 +64,7 @@ interface VaultContextValue {
 
   // ── File I/O ──────────────────────────────────────────────────────────────
   exportToFile: () => Promise<void>
-  importFromFile: () => Promise<void>
+  importFromFile: () => Promise<boolean>
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
   addEntry: (entry: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
@@ -341,7 +341,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     if (blob) await exportVaultToFile(blob)
   }, [])
 
-  const importFromFile = useCallback(async () => {
+  const importFromFile = useCallback(async (): Promise<boolean> => {
     try {
       const blob = await importVaultFromFile()
       if (blob.version !== 1) throw new Error('Unsupported vault version.')
@@ -357,9 +357,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       setNeedsNewPassword(false)
       setError(null)
       setStatus('locked')
+      return true
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (err instanceof DOMException && err.name === 'AbortError') return false
       setError(err instanceof Error ? err.message : 'Failed to import vault file.')
+      return false
     }
   }, [])
 
