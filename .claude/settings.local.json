@@ -17,7 +17,13 @@
       "Bash(node -e \"const { resolve } = require\\('path'\\); console.log\\(resolve\\('../'\\)\\)\")",
       "Bash(node -e \"require\\('react-aria-components'\\); console.log\\('ok'\\)\")",
       "WebFetch(domain:api.anthropic.com)",
-      "PowerShell($content = Get-Content \"C:\\\\Users\\\\FuadBader\\\\.claude\\\\projects\\\\c--Users-FuadBader-Documents-Github-RokoPW-roko-pw\\\\614b4ca3-c960-4104-9b5d-caf7381e25fb\\\\tool-results\\\\wireframes.html\" -Raw; $lines = $content -split \"`n\"; Write-Output \"Total lines: $\\($lines.Count\\)\")"
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\FuadBader\\\\.claude\\\\projects\\\\c--Users-FuadBader-Documents-Github-RokoPW-roko-pw\\\\614b4ca3-c960-4104-9b5d-caf7381e25fb\\\\tool-results\\\\wireframes.html\" -Raw; $lines = $content -split \"`n\"; Write-Output \"Total lines: $\\($lines.Count\\)\")",
+      "WebSearch",
+      "WebFetch(domain:developer.chrome.com)",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"https://api.github.com/repos/GoogleChrome/chrome-extensions-samples/git/trees/main?recursive=1\" -Headers @{ \"User-Agent\" = \"roko\" } -TimeoutSec 20; \\($r.tree | Where-Object { $_.path -match \"ebAuthentication\" } | Select-Object -ExpandProperty path\\) } catch { \"ERR: $\\($_.Exception.Message\\)\" })",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('manifest.json','utf8'\\)\\); console.log\\('manifest.json valid'\\)\")",
+      "Bash(node _test_passkeys.mjs)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

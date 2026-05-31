@@ -58,7 +58,52 @@ async function loadAndRender() {
 
   allEntries = res.all ?? []
   renderEntries(res.entries?.length > 0 ? res.entries : allEntries, res.entries?.length > 0)
+  await renderPasskeys()
   showScreen('vault')
+}
+
+// ─── Passkey rendering ────────────────────────────────────────────────────────
+
+async function renderPasskeys() {
+  const section = $('passkeys-section')
+  const list = $('passkeys-list')
+  const res = await msg({ type: 'GET_PASSKEYS' })
+  const passkeys = res?.passkeys ?? []
+
+  if (passkeys.length === 0) {
+    section.style.display = 'none'
+    list.innerHTML = ''
+    return
+  }
+  section.style.display = 'block'
+  list.innerHTML = ''
+
+  for (const pk of passkeys) {
+    const label = pk.userDisplayName || pk.userName || pk.rpId
+    const card = document.createElement('div')
+    card.className = 'entry-card'
+    card.innerHTML = `
+      <div class="entry-title">🔐 ${escapeHtml(pk.rpId)}</div>
+      <div class="entry-username">${escapeHtml(label)}</div>
+      <div class="entry-actions">
+        <button class="pk-del-btn" data-id="${escapeHtml(pk.credentialId)}">🗑 Remove passkey</button>
+      </div>
+    `
+    list.appendChild(card)
+  }
+
+  list.onclick = async (e) => {
+    const btn = e.target.closest('button.pk-del-btn')
+    if (!btn) return
+    if (btn.dataset.confirmed) {
+      await msg({ type: 'DELETE_PASSKEY', credentialId: btn.dataset.id })
+      await renderPasskeys()
+    } else {
+      btn.dataset.confirmed = '1'
+      btn.textContent = '✓ Confirm remove'
+      setTimeout(() => { delete btn.dataset.confirmed; btn.textContent = '🗑 Remove passkey' }, 2500)
+    }
+  }
 }
 
 function renderEntries(entries, isFiltered) {

@@ -13,10 +13,11 @@ export function initDb(): void {
     PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS users (
-      id          TEXT PRIMARY KEY,
-      email       TEXT UNIQUE NOT NULL,
-      name        TEXT,
-      created_at  INTEGER NOT NULL
+      id            TEXT PRIMARY KEY,
+      email         TEXT UNIQUE NOT NULL,
+      name          TEXT,
+      password_hash TEXT,            -- scrypt hash; NULL for accounts that haven't set one yet
+      created_at    INTEGER NOT NULL
     );
 
     -- One-time OTP codes (hashed) for passwordless login
@@ -82,4 +83,11 @@ export function initDb(): void {
       accepted        INTEGER NOT NULL DEFAULT 0
     );
   `)
+
+  // ── Migrations for databases created before a column existed ────────────────
+  // (CREATE TABLE IF NOT EXISTS won't add columns to an existing table.)
+  const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>
+  if (!userCols.some((col) => col.name === "password_hash")) {
+    db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT")
+  }
 }

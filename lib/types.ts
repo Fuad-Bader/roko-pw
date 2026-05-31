@@ -1,12 +1,46 @@
+/** The kind of item an entry represents. Drives which fields/forms are shown. */
+export type EntryType = 'login' | 'card' | 'note' | 'passkey'
+
 export interface VaultEntry {
   id: string
+  type: EntryType
   title: string
   url: string
   username: string
   password: string
   notes: string
+  /** Starred for quick access (Favorites). */
+  favorite: boolean
+  /** Collection (folder) this entry belongs to, or null for uncategorised. */
+  collectionId: string | null
+  /** Soft-delete timestamp — non-null means the entry is in the Trash. */
+  deletedAt: number | null
+  // ── Card-specific (type === 'card') ──
+  cardNumber?: string
+  cardholder?: string
+  expiry?: string // MM/YY
+  cvv?: string
   createdAt: number
   updatedAt: number
+}
+
+/** The editable fields a form produces — identity/metadata are managed by the provider. */
+export type EntryDraft = Pick<
+  VaultEntry,
+  'type' | 'title' | 'url' | 'username' | 'password' | 'notes' | 'cardNumber' | 'cardholder' | 'expiry' | 'cvv'
+>
+
+/** A user-defined folder that entries can be organised into. */
+export interface Collection {
+  id: string
+  name: string
+  createdAt: number
+}
+
+/** The decrypted vault payload (what the ciphertext serialises to). */
+export interface VaultData {
+  entries: VaultEntry[]
+  collections: Collection[]
 }
 
 /** Recovery blob: the raw vault key wrapped with a key derived from the recovery phrase. */

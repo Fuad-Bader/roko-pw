@@ -37,8 +37,8 @@ app.get('/', (c) =>
 )
 
 app.route('/api/auth', authRoutes)
-app.route('/api', vaultRoutes)     // /api/vaults/*
-app.route('/api', shareRoutes)     // /api/vaults/:id/invite + /api/invite/*
+app.route('/api/vaults', vaultRoutes)  // /api/vaults/*
+app.route('/api', shareRoutes)         // /api/vaults/:id/invite + /api/invite/*
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {

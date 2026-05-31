@@ -1,7 +1,13 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { db } from "../db.js";
 import { sendOtpEmail } from "../email.js";
-import { requireAuth, sha256, randomHex } from "../middleware/auth.js";
+import {
+  requireAuth,
+  sha256,
+  randomHex,
+  hashPassword,
+  verifyPassword,
+} from "../middleware/auth.js";
 
 const OTP_TTL_MS = parseInt(process.env.OTP_TTL_MINUTES ?? "15") * 60 * 1000;
 const SESSION_TTL_MS =
@@ -9,20 +15,37 @@ const SESSION_TTL_MS =
 // Max OTP requests per email per 15-minute window
 const RATE_LIMIT = 5;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
+// Minimum account password length (enforced server-side too).
+const MIN_PASSWORD = 8;
+
+// Whether brand-new emails (no account, no pending invite) may enroll
+// themselves. Set ALLOW_SIGNUPS=false in the server's .env to run an
+// invite-only server — existing users and invited emails can still sign in.
+const ALLOW_SIGNUPS =
+  (process.env.ALLOW_SIGNUPS ?? "true").trim().toLowerCase() !== "false";
+
+// An email may authenticate if signups are open, or it is already known to
+// the server: it has an account, or a pending (unexpired) invite.
+function mayAuthenticate(email: string): boolean {
+  if (ALLOW_SIGNUPS) return true;
+  const existing = db.prepare("SELECT 1 FROM users WHERE email = ?").get(email);
+  if (existing) return true;
+  const invited = db
+    .prepare(
+      "SELECT 1 FROM vault_invites WHERE invited_email = ? AND accepted = 0 AND expires_at > ?",
+    )
+    .get(email, Date.now());
+  return !!invited;
+}
+
+const INVITE_ONLY_ERROR =
+  "This server is invite-only. Ask an admin to invite you.";
 
 export const authRoutes = new Hono();
 
-// ── POST /api/auth/request  ───────────────────────────────────────────────────
-// Send a 6-digit OTP to the given email address.
-authRoutes.post("/request", async (c) => {
-  const body = await c.req
-    .json<{ email?: string }>()
-    .catch(() => ({ email: undefined }));
-  const email = (body.email ?? "").trim().toLowerCase();
-  if (!email || !email.includes("@"))
-    return c.json({ error: "Invalid email" }, 400);
-
-  // Rate limiting
+// Generate, store and email a fresh OTP for `email`. Returns an error response
+// (rate-limit / SMTP failure) or null on success. Applies per-email rate limit.
+async function issueOtp(c: Context, email: string): Promise<Response | null> {
   const now = Date.now();
   const rate = db
     .prepare("SELECT count, window_start FROM otp_rate WHERE email = ?")
@@ -35,20 +58,16 @@ authRoutes.post("/request", async (c) => {
         429,
       );
     }
-    db.prepare("UPDATE otp_rate SET count = count + 1 WHERE email = ?").run(
-      email,
-    );
+    db.prepare("UPDATE otp_rate SET count = count + 1 WHERE email = ?").run(email);
   } else {
     db.prepare(
       "INSERT OR REPLACE INTO otp_rate (email, count, window_start) VALUES (?, 1, ?)",
     ).run(email, now);
   }
 
-  // Generate OTP
   const otp = String(Math.floor(100000 + Math.random() * 900000));
   const otpHash = await sha256(otp);
   const id = randomHex(16);
-
   db.prepare(
     "INSERT INTO auth_requests (id, email, otp_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
   ).run(id, email, otpHash, now, now + OTP_TTL_MS);
@@ -62,19 +81,64 @@ authRoutes.post("/request", async (c) => {
       500,
     );
   }
+  return null;
+}
 
-  return c.json({ ok: true });
+// ── POST /api/auth/login  ─────────────────────────────────────────────────────
+// Step 1 of sign-in: verify email + password, then email a one-time code.
+// Establishing a new session always requires email verification, so a valid
+// password is answered with `{ otpRequired: true }` rather than a session.
+authRoutes.post("/login", async (c) => {
+  const body = await c.req
+    .json<{ email?: string; password?: string }>()
+    .catch(() => ({ email: undefined, password: undefined }));
+  const email = (body.email ?? "").trim().toLowerCase();
+  const password = body.password ?? "";
+  if (!email || !email.includes("@"))
+    return c.json({ error: "Invalid email" }, 400);
+  if (!password) return c.json({ error: "Password required" }, 400);
+
+  // Enrollment policy: don't send a code to an email that can't sign in.
+  if (!mayAuthenticate(email))
+    return c.json({ error: INVITE_ONLY_ERROR }, 403);
+
+  const user = db
+    .prepare("SELECT id, password_hash FROM users WHERE email = ?")
+    .get(email) as { id: string; password_hash: string | null } | undefined;
+
+  // A brand-new account, or a legacy account that never set a password, will
+  // set its password after the email is verified.
+  let newAccount = false;
+  if (!user || !user.password_hash) {
+    if (password.length < MIN_PASSWORD)
+      return c.json(
+        { error: `Password must be at least ${MIN_PASSWORD} characters.` },
+        400,
+      );
+    newAccount = true;
+  } else {
+    if (!(await verifyPassword(password, user.password_hash)))
+      return c.json({ error: "Invalid email or password." }, 401);
+  }
+
+  const otpError = await issueOtp(c, email);
+  if (otpError) return otpError;
+
+  return c.json({ otpRequired: true, newAccount });
 });
 
 // ── POST /api/auth/verify  ────────────────────────────────────────────────────
-// Verify OTP and return a session token.
+// Step 2 of sign-in: verify the OTP (and password again), then issue a session.
+// For new accounts this also creates the account with the given password.
 authRoutes.post("/verify", async (c) => {
   const body = await c.req
-    .json<{ email?: string; otp?: string }>()
-    .catch(() => ({ email: undefined, otp: undefined }));
+    .json<{ email?: string; otp?: string; password?: string }>()
+    .catch(() => ({ email: undefined, otp: undefined, password: undefined }));
   const email = (body.email ?? "").trim().toLowerCase();
   const otp = (body.otp ?? "").trim();
+  const password = body.password ?? "";
   if (!email || !otp) return c.json({ error: "Email and OTP required" }, 400);
+  if (!password) return c.json({ error: "Password required" }, 400);
 
   const otpHash = await sha256(otp);
   const now = Date.now();
@@ -89,20 +153,46 @@ authRoutes.post("/verify", async (c) => {
 
   if (!req) return c.json({ error: "Invalid or expired code." }, 401);
 
-  // Mark used
-  db.prepare("UPDATE auth_requests SET used = 1 WHERE id = ?").run(req.id);
+  // Enforce enrollment policy again at verify time (defense in depth — the
+  // policy or invites may have changed since the code was requested).
+  if (!mayAuthenticate(email))
+    return c.json({ error: INVITE_ONLY_ERROR }, 403);
 
-  // Upsert user
-  let user = db.prepare("SELECT id FROM users WHERE email = ?").get(email) as
-    | { id: string }
-    | undefined;
+  // Resolve the user, creating or setting the password as needed.
+  const user = db
+    .prepare("SELECT id, password_hash FROM users WHERE email = ?")
+    .get(email) as { id: string; password_hash: string | null } | undefined;
+
+  let userId: string;
   if (!user) {
-    const uid = randomHex(16);
+    if (password.length < MIN_PASSWORD)
+      return c.json(
+        { error: `Password must be at least ${MIN_PASSWORD} characters.` },
+        400,
+      );
+    userId = randomHex(16);
     db.prepare(
-      "INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)",
-    ).run(uid, email, now);
-    user = { id: uid };
+      "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+    ).run(userId, email, await hashPassword(password), now);
+  } else if (!user.password_hash) {
+    if (password.length < MIN_PASSWORD)
+      return c.json(
+        { error: `Password must be at least ${MIN_PASSWORD} characters.` },
+        400,
+      );
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(
+      await hashPassword(password),
+      user.id,
+    );
+    userId = user.id;
+  } else {
+    if (!(await verifyPassword(password, user.password_hash)))
+      return c.json({ error: "Invalid email or password." }, 401);
+    userId = user.id;
   }
+
+  // Mark the code used only once we're committed to issuing a session.
+  db.prepare("UPDATE auth_requests SET used = 1 WHERE id = ?").run(req.id);
 
   // Create session
   const token = randomHex(32);
@@ -110,7 +200,7 @@ authRoutes.post("/verify", async (c) => {
   const sessionId = randomHex(16);
   db.prepare(
     "INSERT INTO sessions (id, token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-  ).run(sessionId, tokenHash, user.id, now, now + SESSION_TTL_MS);
+  ).run(sessionId, tokenHash, userId, now, now + SESSION_TTL_MS);
 
   return c.json({ token, expiresAt: now + SESSION_TTL_MS });
 });

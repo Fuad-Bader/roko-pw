@@ -11,6 +11,8 @@ import {
 import type {
   EncryptedVault,
   VaultEntry,
+  EntryDraft,
+  Collection,
   VaultMeta,
   VaultSettings,
   VaultStatus,
@@ -32,7 +34,7 @@ import {
   listServerVaults,
   createServerVault,
   probeServer,
-  requestServerOtp,
+  loginServer,
   verifyServerOtp,
   inviteToVault,
   type RemoteConfig,
@@ -44,6 +46,7 @@ import { generateMnemonic } from '@/lib/mnemonic'
 interface VaultContextValue {
   status: VaultStatus
   entries: VaultEntry[]
+  collections: Collection[]
   settings: VaultSettings
   error: string | null
 
@@ -66,10 +69,25 @@ interface VaultContextValue {
   exportToFile: () => Promise<void>
   importFromFile: () => Promise<boolean>
 
-  // ── CRUD ─────────────────────────────────────────────────────────────────
-  addEntry: (entry: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
-  updateEntry: (id: string, patch: Partial<Omit<VaultEntry, 'id' | 'createdAt'>>) => Promise<void>
-  deleteEntry: (id: string) => Promise<void>
+  // ── Entry CRUD ───────────────────────────────────────────────────────────
+  addEntry: (draft: EntryDraft, collectionId?: string | null) => Promise<void>
+  updateEntry: (id: string, patch: Partial<EntryDraft>) => Promise<void>
+  /** Soft-delete: move an entry to the Trash. */
+  trashEntry: (id: string) => Promise<void>
+  /** Restore an entry from the Trash. */
+  restoreEntry: (id: string) => Promise<void>
+  /** Permanently remove an entry (from the Trash). */
+  deleteForever: (id: string) => Promise<void>
+  /** Toggle an entry's Favorite (star) flag. */
+  toggleFavorite: (id: string) => Promise<void>
+  /** Move an entry into a collection, or out of all collections (null). */
+  moveEntryToCollection: (id: string, collectionId: string | null) => Promise<void>
+
+  // ── Collections ────────────────────────────────────────────────────────────
+  addCollection: (name: string) => Promise<Collection>
+  renameCollection: (id: string, name: string) => Promise<void>
+  /** Delete a collection. Its entries are kept but become uncategorised. */
+  deleteCollection: (id: string) => Promise<void>
 
   // ── Settings ──────────────────────────────────────────────────────────────
   applySettings: (patch: Partial<VaultSettings>) => Promise<void>
@@ -82,16 +100,24 @@ interface VaultContextValue {
 
   /** Verify the server URL is a live RokoPW server. Returns the server name. */
   probeServer: (url: string) => Promise<string>
-  /** Send a login OTP to the given email. */
-  requestOtp: (serverUrl: string, email: string) => Promise<void>
-  /** Verify OTP and store the session. */
-  verifyOtp: (serverUrl: string, email: string, otp: string) => Promise<void>
+  /** Step 1 of sign-in: submit email + password; server emails an OTP. Returns whether this is a new account. */
+  login: (serverUrl: string, email: string, password: string) => Promise<{ newAccount: boolean }>
+  /** Step 2 of sign-in: verify OTP (with password) and store the session. */
+  verifyOtp: (serverUrl: string, email: string, otp: string, password: string) => Promise<void>
   /** Log out of the current server session. */
   logoutServer: () => void
   /** Reload the vault list from the server. */
   refreshServerVaults: () => Promise<void>
   /** Create a new vault on the connected server. */
   createServerVault: (name: string) => Promise<VaultMeta>
+  /** Whether a server vault already has an encrypted blob (false = needs a password set). */
+  serverVaultHasData: (vaultId: string) => Promise<boolean>
+  /**
+   * Set the vault password for a server vault that has no blob yet (new or
+   * orphaned): writes its first encrypted blob (with a recovery phrase) and
+   * opens it unlocked. Shows the recovery phrase via the dashboard modal.
+   */
+  initRemoteVault: (vaultId: string, password: string) => Promise<void>
   /** Invite a user to the current vault by email (sends them the vault password). */
   inviteUser: (email: string, vaultPassword: string) => Promise<void>
 }
@@ -161,6 +187,41 @@ function remoteConfig(session: ServerSession | null): RemoteConfig | undefined {
   return { serverUrl: session.serverUrl, token: session.token }
 }
 
+// Fill in fields added after a vault was first written, so older entries (and
+// entries from vaults created before typed items existed) load cleanly.
+function normalizeEntry(e: Partial<VaultEntry> & { id: string }): VaultEntry {
+  const now = Date.now()
+  return {
+    id: e.id,
+    type: e.type ?? 'login',
+    title: e.title ?? '',
+    url: e.url ?? '',
+    username: e.username ?? '',
+    password: e.password ?? '',
+    notes: e.notes ?? '',
+    favorite: !!e.favorite,
+    collectionId: e.collectionId ?? null,
+    deletedAt: e.deletedAt ?? null,
+    cardNumber: e.cardNumber,
+    cardholder: e.cardholder,
+    expiry: e.expiry,
+    cvv: e.cvv,
+    createdAt: e.createdAt ?? now,
+    updatedAt: e.updatedAt ?? now,
+  }
+}
+
+// Decrypted payloads were originally a bare VaultEntry[]; they are now
+// { entries, collections }. Accept both so existing vaults keep working.
+function parseVaultData(json: string): { entries: VaultEntry[]; collections: Collection[] } {
+  const raw = JSON.parse(json) as
+    | Array<Partial<VaultEntry> & { id: string }>
+    | { entries?: Array<Partial<VaultEntry> & { id: string }>; collections?: Collection[] }
+  const rawEntries = Array.isArray(raw) ? raw : raw.entries ?? []
+  const collections = Array.isArray(raw) ? [] : raw.collections ?? []
+  return { entries: rawEntries.map(normalizeEntry), collections }
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function VaultProvider({ children }: { children: ReactNode }) {
@@ -168,6 +229,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null)
   const [vaultSalt, setVaultSalt] = useState('')
   const [entries, setEntries] = useState<VaultEntry[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [settings, setSettings] = useState<VaultSettings>({ backend: 'local', vaultId: '', serverUrl: '' })
   const [error, setError] = useState<string | null>(null)
   const [recoveryPhrase, setRecoveryPhrase] = useState<string[] | null>(null)
@@ -199,11 +261,15 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       key: CryptoKey,
       salt: string,
       data: VaultEntry[],
+      cols: Collection[],
       s: VaultSettings,
       session: ServerSession | null,
       existingVault?: EncryptedVault | null,
     ) => {
-      const { iv, ciphertext } = await encryptData(key, JSON.stringify(data))
+      const { iv, ciphertext } = await encryptData(
+        key,
+        JSON.stringify({ entries: data, collections: cols }),
+      )
       const blob: EncryptedVault = {
         version: 1,
         salt,
@@ -215,6 +281,19 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       return blob
     },
     [],
+  )
+
+  // Apply a mutation to the entries/collections and persist it.
+  const commit = useCallback(
+    async (nextEntries: VaultEntry[], nextCollections: Collection[]) => {
+      if (!cryptoKey) return
+      setEntries(nextEntries)
+      setCollections(nextCollections)
+      const session = readSession()
+      const existing = await loadVault(settings.backend, settings.vaultId, remoteConfig(session))
+      await persist(cryptoKey, vaultSalt, nextEntries, nextCollections, settings, session, existing)
+    },
+    [cryptoKey, vaultSalt, settings, persist],
   )
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -229,10 +308,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const blob = await loadVault(s.backend, s.vaultId, remoteConfig(session))
       if (!blob) { setStatus('empty'); setError('No vault found. Create one first.'); return }
       const key = await deriveKey(password, blob.salt)
-      const data = JSON.parse(await decryptData(key, blob.iv, blob.ciphertext)) as VaultEntry[]
+      const { entries: data, collections: cols } = parseVaultData(
+        await decryptData(key, blob.iv, blob.ciphertext),
+      )
       setCryptoKey(key)
       setVaultSalt(blob.salt)
       setEntries(data)
+      setCollections(cols)
       setHasRecovery(!!blob.recovery)
       setStatus('unlocked')
     } catch {
@@ -258,10 +340,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const session = readSession()
       const salt = randomSalt()
       const key = await deriveKey(password, salt)
-      await persist(key, salt, [], s, session)
+      await persist(key, salt, [], [], s, session)
       setCryptoKey(key)
       setVaultSalt(salt)
       setEntries([])
+      setCollections([])
       setHasRecovery(false)
       setStatus('unlocked')
     },
@@ -278,10 +361,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       if (!blob?.recovery) throw new Error('This vault has no recovery phrase set up.')
       const recoveryKey = await deriveKey(words.join(' '), blob.recovery.salt)
       const vaultKey = await unwrapKey(blob.recovery.wrappedKey, blob.recovery.iv, recoveryKey)
-      const data = JSON.parse(await decryptData(vaultKey, blob.iv, blob.ciphertext)) as VaultEntry[]
+      const { entries: data, collections: cols } = parseVaultData(
+        await decryptData(vaultKey, blob.iv, blob.ciphertext),
+      )
       setCryptoKey(vaultKey)
       setVaultSalt(blob.salt)
       setEntries(data)
+      setCollections(cols)
       setHasRecovery(true)
       setStatus('unlocked')
       setNeedsNewPassword(true)
@@ -301,7 +387,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const session = readSession()
       const newSalt = randomSalt()
       const newKey = await deriveKey(newPassword, newSalt)
-      const { iv, ciphertext } = await encryptData(newKey, JSON.stringify(entries))
+      const { iv, ciphertext } = await encryptData(
+        newKey,
+        JSON.stringify({ entries, collections }),
+      )
       const blob: EncryptedVault = { version: 1, salt: newSalt, iv, ciphertext }
       await saveVault(s.backend, s.vaultId, blob, remoteConfig(session))
       setCryptoKey(newKey)
@@ -309,7 +398,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       setHasRecovery(false)
       setNeedsNewPassword(false)
     },
-    [cryptoKey, entries],
+    [cryptoKey, entries, collections],
   )
 
   // ─── Recovery ──────────────────────────────────────────────────────────────
@@ -368,47 +457,106 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   // ─── CRUD ──────────────────────────────────────────────────────────────────
 
   const addEntry = useCallback(
-    async (entry: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
-      if (!cryptoKey) return
+    async (draft: EntryDraft, collectionId: string | null = null) => {
+      const now = Date.now()
       const newEntry: VaultEntry = {
-        ...entry,
+        ...draft,
         id: crypto.randomUUID(),
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        favorite: false,
+        collectionId,
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
       }
-      const next = [...entries, newEntry]
-      setEntries(next)
-      const session = readSession()
-      const blob = await loadVault(settings.backend, settings.vaultId, remoteConfig(session))
-      await persist(cryptoKey, vaultSalt, next, settings, session, blob)
+      await commit([...entries, newEntry], collections)
     },
-    [cryptoKey, entries, vaultSalt, settings, persist],
+    [entries, collections, commit],
   )
 
   const updateEntry = useCallback(
-    async (id: string, patch: Partial<Omit<VaultEntry, 'id' | 'createdAt'>>) => {
-      if (!cryptoKey) return
+    async (id: string, patch: Partial<EntryDraft>) => {
       const next = entries.map((e) =>
         e.id === id ? { ...e, ...patch, updatedAt: Date.now() } : e,
       )
-      setEntries(next)
-      const session = readSession()
-      const blob = await loadVault(settings.backend, settings.vaultId, remoteConfig(session))
-      await persist(cryptoKey, vaultSalt, next, settings, session, blob)
+      await commit(next, collections)
     },
-    [cryptoKey, entries, vaultSalt, settings, persist],
+    [entries, collections, commit],
   )
 
-  const deleteEntry = useCallback(
+  const trashEntry = useCallback(
     async (id: string) => {
-      if (!cryptoKey) return
-      const next = entries.filter((e) => e.id !== id)
-      setEntries(next)
-      const session = readSession()
-      const blob = await loadVault(settings.backend, settings.vaultId, remoteConfig(session))
-      await persist(cryptoKey, vaultSalt, next, settings, session, blob)
+      const next = entries.map((e) =>
+        e.id === id ? { ...e, deletedAt: Date.now(), favorite: false } : e,
+      )
+      await commit(next, collections)
     },
-    [cryptoKey, entries, vaultSalt, settings, persist],
+    [entries, collections, commit],
+  )
+
+  const restoreEntry = useCallback(
+    async (id: string) => {
+      const next = entries.map((e) => (e.id === id ? { ...e, deletedAt: null } : e))
+      await commit(next, collections)
+    },
+    [entries, collections, commit],
+  )
+
+  const deleteForever = useCallback(
+    async (id: string) => {
+      await commit(entries.filter((e) => e.id !== id), collections)
+    },
+    [entries, collections, commit],
+  )
+
+  const toggleFavorite = useCallback(
+    async (id: string) => {
+      const next = entries.map((e) => (e.id === id ? { ...e, favorite: !e.favorite } : e))
+      await commit(next, collections)
+    },
+    [entries, collections, commit],
+  )
+
+  const moveEntryToCollection = useCallback(
+    async (id: string, collectionId: string | null) => {
+      const next = entries.map((e) => (e.id === id ? { ...e, collectionId } : e))
+      await commit(next, collections)
+    },
+    [entries, collections, commit],
+  )
+
+  // ─── Collections ─────────────────────────────────────────────────────────────
+
+  const addCollection = useCallback(
+    async (name: string): Promise<Collection> => {
+      const col: Collection = {
+        id: crypto.randomUUID(),
+        name: name.trim() || 'Untitled',
+        createdAt: Date.now(),
+      }
+      await commit(entries, [...collections, col])
+      return col
+    },
+    [entries, collections, commit],
+  )
+
+  const renameCollection = useCallback(
+    async (id: string, name: string) => {
+      const next = collections.map((c) =>
+        c.id === id ? { ...c, name: name.trim() || c.name } : c,
+      )
+      await commit(entries, next)
+    },
+    [entries, collections, commit],
+  )
+
+  const deleteCollection = useCallback(
+    async (id: string) => {
+      const nextEntries = entries.map((e) =>
+        e.collectionId === id ? { ...e, collectionId: null } : e,
+      )
+      await commit(nextEntries, collections.filter((c) => c.id !== id))
+    },
+    [entries, collections, commit],
   )
 
   // ─── Settings ──────────────────────────────────────────────────────────────
@@ -421,10 +569,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       if (cryptoKey && vaultSalt) {
         const session = readSession()
         const blob = await loadVault(settings.backend, settings.vaultId, remoteConfig(session))
-        await persist(cryptoKey, vaultSalt, entries, updated, session, blob)
+        await persist(cryptoKey, vaultSalt, entries, collections, updated, session, blob)
       }
     },
-    [settings, cryptoKey, vaultSalt, entries, persist],
+    [settings, cryptoKey, vaultSalt, entries, collections, persist],
   )
 
   const clearError = useCallback(() => setError(null), [])
@@ -435,24 +583,25 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     return probeServer(url.trim().replace(/\/$/, ''))
   }, [])
 
-  const requestOtp = useCallback(async (serverUrl: string, email: string) => {
+  const login = useCallback(async (serverUrl: string, email: string, password: string) => {
     setError(null)
     setServerLoading(true)
     try {
-      await requestServerOtp(serverUrl, email)
+      const { newAccount } = await loginServer(serverUrl, email, password)
+      return { newAccount }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send login code')
+      setError(err instanceof Error ? err.message : 'Sign-in failed')
       throw err
     } finally {
       setServerLoading(false)
     }
   }, [])
 
-  const verifyOtp = useCallback(async (serverUrl: string, email: string, otp: string) => {
+  const verifyOtp = useCallback(async (serverUrl: string, email: string, otp: string, password: string) => {
     setError(null)
     setServerLoading(true)
     try {
-      const { token, expiresAt } = await verifyServerOtp(serverUrl, email, otp)
+      const { token, expiresAt } = await verifyServerOtp(serverUrl, email, otp, password)
       // Fetch user details
       const meRes = await fetch(`${serverUrl}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -505,6 +654,49 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     return vault
   }, [])
 
+  const serverVaultHasData = useCallback(async (vaultId: string): Promise<boolean> => {
+    const session = readSession()
+    if (!session) return false
+    const blob = await loadVault('remote', vaultId, remoteConfig(session))
+    return !!blob
+  }, [])
+
+  const initRemoteVault = useCallback(async (vaultId: string, password: string) => {
+    setError(null)
+    const session = readSession()
+    if (!session) throw new Error('Not connected to a server')
+    // Point settings at this remote vault so subsequent saves/loads target it.
+    const updated: VaultSettings = { backend: 'remote', vaultId, serverUrl: session.serverUrl }
+    writeSettings(updated)
+    setSettings(updated)
+    // Derive the vault key and generate a recovery phrase, then write the first blob.
+    const salt = randomSalt()
+    const key = await deriveKey(password, salt)
+    const words = generateMnemonic()
+    const recoverySalt = randomSalt()
+    const recoveryKey = await deriveKey(words.join(' '), recoverySalt)
+    const { iv: rIv, wrappedKey } = await wrapKey(key, recoveryKey)
+    const { iv, ciphertext } = await encryptData(
+      key,
+      JSON.stringify({ entries: [], collections: [] }),
+    )
+    const blob: EncryptedVault = {
+      version: 1,
+      salt,
+      iv,
+      ciphertext,
+      recovery: { salt: recoverySalt, iv: rIv, wrappedKey },
+    }
+    await saveVault('remote', vaultId, blob, remoteConfig(session))
+    setCryptoKey(key)
+    setVaultSalt(salt)
+    setEntries([])
+    setCollections([])
+    setHasRecovery(true)
+    setRecoveryPhrase(words) // surfaces the recovery-phrase modal in the dashboard
+    setStatus('unlocked')
+  }, [])
+
   const inviteUser = useCallback(async (email: string, vaultPassword: string) => {
     const s = readSettings()
     const session = readSession()
@@ -524,6 +716,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       value={{
         status,
         entries,
+        collections,
         settings,
         error,
         needsNewPassword,
@@ -540,18 +733,27 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         importFromFile,
         addEntry,
         updateEntry,
-        deleteEntry,
+        trashEntry,
+        restoreEntry,
+        deleteForever,
+        toggleFavorite,
+        moveEntryToCollection,
+        addCollection,
+        renameCollection,
+        deleteCollection,
         applySettings,
         clearError,
         serverSession,
         serverVaults,
         serverLoading,
         probeServer: handleProbeServer,
-        requestOtp,
+        login,
         verifyOtp,
         logoutServer,
         refreshServerVaults,
         createServerVault: handleCreateServerVault,
+        serverVaultHasData,
+        initRemoteVault,
         inviteUser,
       }}
     >

@@ -121,27 +121,42 @@ export async function probeServer(url: string): Promise<string> {
   return body.name ?? 'RokoPW Server'
 }
 
-/** Request an OTP to be sent to the given email. */
-export async function requestServerOtp(serverUrl: string, email: string): Promise<void> {
-  const res = await fetch(`${serverUrl}/api/auth/request`, {
+/**
+ * Step 1 of sign-in: submit email + password. On success the server emails a
+ * one-time code and returns `{ otpRequired: true }`. `newAccount` is true when
+ * this email has no account yet (or hasn't set a password) — the caller should
+ * then treat the entered password as the new account password.
+ */
+export async function loginServer(
+  serverUrl: string,
+  email: string,
+  password: string,
+): Promise<{ otpRequired: boolean; newAccount: boolean }> {
+  const res = await fetch(`${serverUrl}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, password }),
   })
-  const body = await res.json() as { error?: string }
-  if (!res.ok) throw new Error(body.error ?? 'Failed to send login code')
+  const body = (await res.json()) as {
+    otpRequired?: boolean
+    newAccount?: boolean
+    error?: string
+  }
+  if (!res.ok) throw new Error(body.error ?? 'Sign-in failed')
+  return { otpRequired: !!body.otpRequired, newAccount: !!body.newAccount }
 }
 
-/** Verify the OTP and return a session token + expiry. */
+/** Step 2 of sign-in: verify the OTP (with the password) and get a session token. */
 export async function verifyServerOtp(
   serverUrl: string,
   email: string,
   otp: string,
+  password: string,
 ): Promise<{ token: string; expiresAt: number }> {
   const res = await fetch(`${serverUrl}/api/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, otp }),
+    body: JSON.stringify({ email, otp, password }),
   })
   const body = await res.json() as { token?: string; expiresAt?: number; error?: string }
   if (!res.ok) throw new Error(body.error ?? 'Invalid or expired code')

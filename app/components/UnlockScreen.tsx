@@ -135,8 +135,10 @@ export function UnlockScreen() {
   }
 
   const handleVaultSelected = async (vault: VaultMeta) => {
+    // ServerLogin only calls this for vaults that already have an encrypted blob;
+    // brand-new/empty vaults get their password set inside ServerLogin itself.
     await applySettings({ backend: 'remote', vaultId: vault.id, serverUrl: settings.serverUrl })
-    switchMode(vault.id ? 'unlock' : 'create')
+    switchMode('unlock')
   }
 
   const displayError = localError || error

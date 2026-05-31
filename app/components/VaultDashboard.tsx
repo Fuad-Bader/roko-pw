@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import type { VaultEntry } from '@/lib/types'
+import type { VaultEntry, EntryType, EntryDraft, Collection } from '@/lib/types'
 import { useVault } from './VaultProvider'
 import { useTheme, ACCENTS } from './ThemeProvider'
-import { CredentialCard } from './CredentialCard'
 import { CredentialForm } from './CredentialForm'
 import { PasswordGenerator } from './PasswordGenerator'
 import { RecoveryPhraseDisplay } from './RecoveryPhraseDisplay'
@@ -15,7 +14,6 @@ import {
   Star01,
   Lock01,
   CreditCard01,
-  User01,
   File01,
   Fingerprint01,
   Trash01,
@@ -31,24 +29,45 @@ import {
   EyeOff,
   Copy01,
   RefreshCw01,
-  Cloud01,
   ShieldTick,
 } from '@untitledui/icons'
 
 type Panel = 'none' | 'add' | 'edit' | 'settings' | 'generator'
 type Category = 'all' | 'favorites' | 'logins' | 'cards' | 'notes' | 'passkeys' | 'trash'
+type View = { kind: 'category'; category: Category } | { kind: 'collection'; id: string }
 
-const NAV_ITEMS: { id: Category; label: string; icon: React.ElementType; count?: boolean }[] = [
-  { id: 'all', label: 'All items', icon: Grid01, count: true },
+const NAV_ITEMS: { id: Category; label: string; icon: React.ElementType }[] = [
+  { id: 'all', label: 'All items', icon: Grid01 },
   { id: 'favorites', label: 'Favorites', icon: Star01 },
-  { id: 'logins', label: 'Logins', icon: Lock01, count: true },
+  { id: 'logins', label: 'Logins', icon: Lock01 },
   { id: 'cards', label: 'Cards', icon: CreditCard01 },
   { id: 'notes', label: 'Secure notes', icon: File01 },
   { id: 'passkeys', label: 'Passkeys', icon: Fingerprint01 },
   { id: 'trash', label: 'Trash', icon: Trash01 },
 ]
 
-const S: React.CSSProperties = {}
+const TYPE_EMOJI: Record<EntryType, string> = { login: '🔑', card: '💳', note: '📝', passkey: '🔐' }
+
+function inCategory(e: VaultEntry, cat: Category): boolean {
+  if (cat === 'trash') return !!e.deletedAt
+  if (e.deletedAt) return false
+  switch (cat) {
+    case 'all': return true
+    case 'favorites': return e.favorite
+    case 'logins': return e.type === 'login'
+    case 'cards': return e.type === 'card'
+    case 'notes': return e.type === 'note'
+    case 'passkeys': return e.type === 'passkey'
+  }
+}
+
+function addTypeFor(view: View): EntryType {
+  if (view.kind !== 'category') return 'login'
+  if (view.category === 'cards') return 'card'
+  if (view.category === 'notes') return 'note'
+  if (view.category === 'passkeys') return 'passkey'
+  return 'login'
+}
 
 function Logo({ size = 24 }: { size?: number }) {
   return (
@@ -80,13 +99,61 @@ function Logo({ size = 24 }: { size?: number }) {
   )
 }
 
+function EntryAvatar({ entry, size = 32 }: { entry: VaultEntry; size?: number }) {
+  const favicon =
+    entry.type === 'login' && entry.url
+      ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(entry.url)}`
+      : null
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        borderRadius: entry.type === 'card' ? 8 : '50%',
+        background: 'var(--color-bg-brand-solid)',
+        color: '#fff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: size * 0.4,
+        fontWeight: 700,
+        flexShrink: 0,
+        overflow: 'hidden',
+      }}
+    >
+      {favicon ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={favicon}
+          alt=""
+          width={size * 0.625}
+          height={size * 0.625}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+        />
+      ) : entry.type === 'login' ? (
+        entry.title.slice(0, 2).toUpperCase()
+      ) : (
+        TYPE_EMOJI[entry.type]
+      )}
+    </span>
+  )
+}
+
 export function VaultDashboard() {
   const {
     entries,
+    collections,
     lock,
     addEntry,
     updateEntry,
-    deleteEntry,
+    trashEntry,
+    restoreEntry,
+    deleteForever,
+    toggleFavorite,
+    moveEntryToCollection,
+    addCollection,
+    renameCollection,
+    deleteCollection,
     settings,
     applySettings,
     exportToFile,
@@ -102,22 +169,63 @@ export function VaultDashboard() {
   const { theme, toggleTheme, accent, setAccent } = useTheme()
   const [query, setQuery] = useState('')
   const [panel, setPanel] = useState<Panel>('none')
-  const [category, setCategory] = useState<Category>('all')
+  const [view, setView] = useState<View>({ kind: 'category', category: 'all' })
   const [editing, setEditing] = useState<VaultEntry | null>(null)
   const [selected, setSelected] = useState<VaultEntry | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
+  // Collections UI
+  const [addingCollection, setAddingCollection] = useState(false)
+  const [newCollectionName, setNewCollectionName] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [collectionConfirm, setCollectionConfirm] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverCollection, setDragOverCollection] = useState<string | null>(null)
+
+  const activeCollectionId = view.kind === 'collection' ? view.id : null
+
+  const counts = useMemo(() => {
+    const live = entries.filter((e) => !e.deletedAt)
+    return {
+      all: live.length,
+      favorites: live.filter((e) => e.favorite).length,
+      logins: live.filter((e) => e.type === 'login').length,
+      cards: live.filter((e) => e.type === 'card').length,
+      notes: live.filter((e) => e.type === 'note').length,
+      passkeys: live.filter((e) => e.type === 'passkey').length,
+      trash: entries.filter((e) => !!e.deletedAt).length,
+    } as Record<Category, number>
+  }, [entries])
+
+  const collectionCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const e of entries) {
+      if (!e.deletedAt && e.collectionId) m[e.collectionId] = (m[e.collectionId] ?? 0) + 1
+    }
+    return m
+  }, [entries])
+
   const filtered = useMemo(() => {
-    const q = query.toLowerCase()
-    const base = category === 'all' ? entries : entries
+    const base =
+      view.kind === 'collection'
+        ? entries.filter((e) => !e.deletedAt && e.collectionId === view.id)
+        : entries.filter((e) => inCategory(e, view.category))
+    const q = query.trim().toLowerCase()
     if (!q) return base
     return base.filter(
       (e) =>
         e.title.toLowerCase().includes(q) ||
         e.username.toLowerCase().includes(q) ||
-        e.url.toLowerCase().includes(q),
+        e.url.toLowerCase().includes(q) ||
+        (e.cardholder ?? '').toLowerCase().includes(q),
     )
-  }, [entries, query, category])
+  }, [entries, query, view])
+
+  const viewTitle =
+    view.kind === 'collection'
+      ? collections.find((c) => c.id === view.id)?.name ?? 'Collection'
+      : NAV_ITEMS.find((n) => n.id === view.category)?.label ?? 'All items'
 
   const openEdit = useCallback((entry: VaultEntry) => {
     setEditing(entry)
@@ -130,32 +238,71 @@ export function VaultDashboard() {
     setEditing(null)
   }, [])
 
-  const handleAdd = async (data: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
-    await addEntry(data)
+  const handleAdd = async (data: EntryDraft) => {
+    await addEntry(data, activeCollectionId)
     closePanel()
   }
 
-  const handleUpdate = async (data: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleUpdate = async (data: EntryDraft) => {
     if (!editing) return
     await updateEntry(editing.id, data)
     closePanel()
   }
 
-  const handleDelete = async (id: string) => {
-    if (deleteConfirm === id) {
-      await deleteEntry(id)
+  // Trash (soft delete) with a 3s confirm window; from Trash view this deletes forever.
+  const handleDelete = async (entry: VaultEntry) => {
+    if (deleteConfirm === entry.id) {
+      if (entry.deletedAt) await deleteForever(entry.id)
+      else await trashEntry(entry.id)
       setDeleteConfirm(null)
-      if (selected?.id === id) setSelected(null)
+      if (selected?.id === entry.id) setSelected(null)
     } else {
-      setDeleteConfirm(id)
+      setDeleteConfirm(entry.id)
       setTimeout(() => setDeleteConfirm(null), 3000)
     }
+  }
+
+  const handleRestore = async (id: string) => {
+    await restoreEntry(id)
+    if (selected?.id === id) setSelected((s) => (s ? { ...s, deletedAt: null } : s))
   }
 
   const openPanel = (p: Panel) => {
     setPanel((prev) => (prev === p ? 'none' : p))
     setEditing(null)
     setSelected(null)
+  }
+
+  const selectView = (v: View) => {
+    setView(v)
+    setSelected(null)
+    setPanel('none')
+  }
+
+  const submitNewCollection = async () => {
+    const name = newCollectionName.trim()
+    if (!name) { setAddingCollection(false); return }
+    const col = await addCollection(name)
+    setNewCollectionName('')
+    setAddingCollection(false)
+    selectView({ kind: 'collection', id: col.id })
+  }
+
+  const submitRename = async (id: string) => {
+    const name = renameValue.trim()
+    if (name) await renameCollection(id, name)
+    setRenamingId(null)
+  }
+
+  const handleDeleteCollection = async (id: string) => {
+    if (collectionConfirm === id) {
+      await deleteCollection(id)
+      setCollectionConfirm(null)
+      if (view.kind === 'collection' && view.id === id) selectView({ kind: 'category', category: 'all' })
+    } else {
+      setCollectionConfirm(id)
+      setTimeout(() => setCollectionConfirm(null), 3000)
+    }
   }
 
   return (
@@ -180,12 +327,7 @@ export function VaultDashboard() {
         }}
       >
         {/* Logo */}
-        <div
-          style={{
-            padding: '16px 12px 12px',
-            borderBottom: '1px solid var(--color-border-secondary)',
-          }}
-        >
+        <div style={{ padding: '16px 12px 12px', borderBottom: '1px solid var(--color-border-secondary)' }}>
           <Logo size={22} />
         </div>
 
@@ -237,12 +379,13 @@ export function VaultDashboard() {
             Library
           </div>
           {NAV_ITEMS.map((item) => {
-            const active = category === item.id
+            const active = view.kind === 'category' && view.category === item.id
             const Icon = item.icon
+            const count = counts[item.id]
             return (
               <button
                 key={item.id}
-                onClick={() => setCategory(item.id)}
+                onClick={() => selectView({ kind: 'category', category: item.id })}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -264,32 +407,16 @@ export function VaultDashboard() {
               >
                 <Icon size={15} />
                 <span style={{ flex: 1 }}>{item.label}</span>
-                {item.id === 'all' && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      fontWeight: 400,
-                    }}
-                  >
-                    {entries.length}
-                  </span>
-                )}
-                {item.id === 'logins' && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      fontWeight: 400,
-                    }}
-                  >
-                    {entries.length}
+                {count > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+                    {count}
                   </span>
                 )}
               </button>
             )
           })}
 
+          {/* Collections */}
           <div
             style={{
               fontSize: 11,
@@ -304,25 +431,129 @@ export function VaultDashboard() {
             }}
           >
             Collections
-            <Plus size={12} color="var(--color-fg-quaternary)" />
-          </div>
-          {['Personal', 'Work', 'Shared'].map((c) => (
-            <div
-              key={c}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '5px 8px',
-                color: 'var(--color-text-secondary)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
+            <button
+              onClick={() => { setAddingCollection(true); setNewCollectionName('') }}
+              title="New collection"
+              style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', display: 'flex', padding: 0 }}
             >
-              <Folder size={14} color="var(--color-fg-quaternary)" />
-              {c}
-            </div>
-          ))}
+              <Plus size={12} />
+            </button>
+          </div>
+
+          {addingCollection && (
+            <input
+              autoFocus
+              value={newCollectionName}
+              onChange={(e) => setNewCollectionName(e.target.value)}
+              onBlur={submitNewCollection}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitNewCollection()
+                if (e.key === 'Escape') { setAddingCollection(false); setNewCollectionName('') }
+              }}
+              placeholder="Collection name"
+              style={{
+                width: '100%',
+                padding: '5px 8px',
+                marginBottom: 2,
+                border: '1px solid var(--color-border-primary)',
+                borderRadius: 6,
+                background: 'var(--color-bg-primary)',
+                color: 'var(--color-text-primary)',
+                fontSize: 13,
+                outline: 'none',
+              }}
+            />
+          )}
+
+          {collections.length === 0 && !addingCollection && (
+            <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', padding: '2px 8px' }}>
+              Drag items here to organise them.
+            </p>
+          )}
+
+          {collections.map((c) => {
+            const active = view.kind === 'collection' && view.id === c.id
+            const isOver = dragOverCollection === c.id
+            if (renamingId === c.id) {
+              return (
+                <input
+                  key={c.id}
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => submitRename(c.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitRename(c.id)
+                    if (e.key === 'Escape') setRenamingId(null)
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '5px 8px',
+                    marginBottom: 1,
+                    border: '1px solid var(--color-border-brand)',
+                    borderRadius: 6,
+                    background: 'var(--color-bg-primary)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              )
+            }
+            return (
+              <div
+                key={c.id}
+                onClick={() => selectView({ kind: 'collection', id: c.id })}
+                onDragOver={(e) => { e.preventDefault(); setDragOverCollection(c.id) }}
+                onDragLeave={() => setDragOverCollection((p) => (p === c.id ? null : p))}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const id = e.dataTransfer.getData('text/plain') || dragId
+                  if (id) moveEntryToCollection(id, c.id)
+                  setDragOverCollection(null)
+                  setDragId(null)
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '5px 8px',
+                  borderRadius: 6,
+                  marginBottom: 1,
+                  background: isOver
+                    ? 'var(--color-brand-100)'
+                    : active
+                      ? 'var(--color-bg-primary)'
+                      : 'transparent',
+                  boxShadow: isOver ? 'inset 0 0 0 1px var(--color-border-brand)' : 'none',
+                  color: active ? 'var(--color-brand-700)' : 'var(--color-text-secondary)',
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                <Folder size={14} color={active ? 'var(--color-brand-600)' : 'var(--color-fg-quaternary)'} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                {collectionCounts[c.id] > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{collectionCounts[c.id]}</span>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.name) }}
+                  title="Rename"
+                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', fontSize: 11, padding: 0 }}
+                >
+                  ✎
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteCollection(c.id) }}
+                  title={collectionConfirm === c.id ? 'Click again to delete' : 'Delete collection'}
+                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: collectionConfirm === c.id ? 'var(--color-fg-error-primary)' : 'var(--color-fg-quaternary)', fontSize: 11, padding: 0 }}
+                >
+                  🗑
+                </button>
+              </div>
+            )
+          })}
         </nav>
 
         {/* Bottom: theme + user */}
@@ -335,15 +566,7 @@ export function VaultDashboard() {
             gap: 6,
           }}
         >
-          {/* Accent & theme controls */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '4px 8px',
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px' }}>
             <div style={{ display: 'flex', gap: 4, flex: 1 }}>
               {ACCENTS.map((a) => (
                 <button
@@ -384,7 +607,6 @@ export function VaultDashboard() {
             </button>
           </div>
 
-          {/* User profile */}
           <div
             style={{
               display: 'flex',
@@ -425,28 +647,14 @@ export function VaultDashboard() {
             <button
               onClick={() => openPanel('settings')}
               title="Settings"
-              style={{
-                border: 0,
-                background: 'transparent',
-                cursor: 'pointer',
-                color: 'var(--color-fg-quaternary)',
-                display: 'flex',
-                padding: 2,
-              }}
+              style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', display: 'flex', padding: 2 }}
             >
               <Settings01 size={13} />
             </button>
             <button
               onClick={lock}
               title="Lock vault"
-              style={{
-                border: 0,
-                background: 'transparent',
-                cursor: 'pointer',
-                color: 'var(--color-fg-quaternary)',
-                display: 'flex',
-                padding: 2,
-              }}
+              style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', display: 'flex', padding: 2 }}
             >
               <LockUnlocked01 size={13} />
             </button>
@@ -463,7 +671,6 @@ export function VaultDashboard() {
           overflow: 'hidden',
         }}
       >
-        {/* List header */}
         <div
           style={{
             padding: '14px 16px 10px',
@@ -474,59 +681,34 @@ export function VaultDashboard() {
           }}
         >
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>All items</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{viewTitle}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
               {filtered.length} item{filtered.length !== 1 ? 's' : ''}
             </div>
           </div>
-          <button
-            onClick={() => openPanel('add')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 32,
-              padding: '0 12px',
-              borderRadius: 6,
-              background: 'var(--color-bg-brand-solid)',
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-              border: 0,
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px 0 rgba(16,24,40,.05)',
-            }}
-          >
-            <Plus size={13} />
-            New
-          </button>
-        </div>
-
-        {/* Sort tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 2,
-            padding: '8px 12px',
-            borderBottom: '1px solid var(--color-border-secondary)',
-          }}
-        >
-          {['Recent', 'A–Z'].map((s, i) => (
-            <span
-              key={s}
+          {view.kind === 'category' && view.category === 'trash' ? null : (
+            <button
+              onClick={() => openPanel('add')}
               style={{
-                fontSize: 12,
-                padding: '3px 10px',
-                borderRadius: 999,
-                background: i === 0 ? 'var(--color-bg-tertiary)' : 'transparent',
-                color: i === 0 ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
-                fontWeight: i === 0 ? 600 : 500,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                height: 32,
+                padding: '0 12px',
+                borderRadius: 6,
+                background: 'var(--color-bg-brand-solid)',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 600,
+                border: 0,
                 cursor: 'pointer',
+                boxShadow: '0 1px 2px 0 rgba(16,24,40,.05)',
               }}
             >
-              {s}
-            </span>
-          ))}
+              <Plus size={13} />
+              New
+            </button>
+          )}
         </div>
 
         {/* List */}
@@ -548,13 +730,19 @@ export function VaultDashboard() {
               <Lock01 size={40} color="var(--color-fg-quaternary)" />
               <div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px' }}>
-                  {entries.length > 0 ? 'No results found' : 'Your vault is empty'}
+                  {query ? 'No results found' : view.kind === 'category' && view.category === 'trash' ? 'Trash is empty' : 'Nothing here yet'}
                 </p>
-                {entries.length === 0 && (
-                  <p style={{ fontSize: 13, margin: 0 }}>Add your first credential to get started.</p>
+                {!query && (
+                  <p style={{ fontSize: 13, margin: 0 }}>
+                    {view.kind === 'collection'
+                      ? 'Drag items onto this collection, or add a new one.'
+                      : view.category === 'trash'
+                        ? 'Deleted items will appear here.'
+                        : 'Add your first item to get started.'}
+                  </p>
                 )}
               </div>
-              {entries.length === 0 && (
+              {!(view.kind === 'category' && view.category === 'trash') && !query && (
                 <button
                   onClick={() => openPanel('add')}
                   style={{
@@ -572,24 +760,28 @@ export function VaultDashboard() {
                     cursor: 'pointer',
                   }}
                 >
-                  <Plus size={14} /> Add credential
+                  <Plus size={14} /> Add item
                 </button>
               )}
             </div>
           ) : (
             filtered.map((entry) => {
               const isSelected = selected?.id === entry.id
-              const favicon = entry.url
-                ? `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(entry.url)}`
-                : null
-              const initials = entry.title.slice(0, 2).toUpperCase()
+              const subtitle =
+                entry.type === 'card'
+                  ? entry.cardNumber
+                    ? `•••• ${entry.cardNumber.replace(/\s/g, '').slice(-4)}`
+                    : 'Card'
+                  : entry.type === 'note'
+                    ? 'Secure note'
+                    : entry.username || entry.url
               return (
                 <div
                   key={entry.id}
-                  onClick={() => {
-                    setSelected(isSelected ? null : entry)
-                    setPanel('none')
-                  }}
+                  draggable={!entry.deletedAt}
+                  onDragStart={(e) => { setDragId(entry.id); e.dataTransfer.setData('text/plain', entry.id); e.dataTransfer.effectAllowed = 'move' }}
+                  onDragEnd={() => { setDragId(null); setDragOverCollection(null) }}
+                  onClick={() => { setSelected(isSelected ? null : entry); setPanel('none') }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -597,41 +789,12 @@ export function VaultDashboard() {
                     padding: '9px 14px',
                     borderBottom: '1px solid var(--color-border-secondary)',
                     background: isSelected ? 'var(--color-brand-50)' : 'transparent',
+                    opacity: dragId === entry.id ? 0.5 : 1,
                     cursor: 'pointer',
                     transition: 'background 0.1s',
                   }}
                 >
-                  <span
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: 'var(--color-bg-brand-solid)',
-                      color: '#fff',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      flexShrink: 0,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {favicon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={favicon}
-                        alt=""
-                        width={20}
-                        height={20}
-                        onError={(e) => {
-                          ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-                        }}
-                      />
-                    ) : (
-                      initials
-                    )}
-                  </span>
+                  <EntryAvatar entry={entry} size={32} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
@@ -645,18 +808,19 @@ export function VaultDashboard() {
                     >
                       {entry.title}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--color-text-tertiary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {entry.username}
+                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {subtitle}
                     </div>
                   </div>
+                  {!entry.deletedAt && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(entry.id) }}
+                      title={entry.favorite ? 'Unfavorite' : 'Favorite'}
+                      style={{ border: 0, background: 'transparent', cursor: 'pointer', display: 'flex', padding: 2, color: entry.favorite ? 'var(--color-warning-solid, #f5a623)' : 'var(--color-fg-quaternary)' }}
+                    >
+                      <Star01 size={14} style={entry.favorite ? { fill: 'currentColor' } : undefined} />
+                    </button>
+                  )}
                   <ChevronRight size={13} color="var(--color-fg-quaternary)" />
                 </div>
               )
@@ -690,22 +854,15 @@ export function VaultDashboard() {
       </section>
 
       {/* ── Right Panel ── */}
-      <main
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          background: 'var(--color-bg-primary)',
-        }}
-      >
+      <main style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--color-bg-primary)' }}>
         {panel === 'add' && (
-          <RightPanel title="Add credential" onClose={closePanel}>
-            <CredentialForm onSave={handleAdd} onCancel={closePanel} />
+          <RightPanel title="Add item" onClose={closePanel}>
+            <CredentialForm defaultType={addTypeFor(view)} onSave={handleAdd} onCancel={closePanel} />
           </RightPanel>
         )}
 
         {panel === 'edit' && editing && (
-          <RightPanel title="Edit credential" onClose={closePanel}>
+          <RightPanel title="Edit item" onClose={closePanel}>
             <CredentialForm initial={editing} onSave={handleUpdate} onCancel={closePanel} />
           </RightPanel>
         )}
@@ -733,8 +890,12 @@ export function VaultDashboard() {
         {panel === 'none' && selected && (
           <CredentialDetail
             entry={selected}
+            collections={collections}
             onEdit={openEdit}
             onDelete={handleDelete}
+            onRestore={handleRestore}
+            onToggleFavorite={toggleFavorite}
+            onMoveToCollection={moveEntryToCollection}
             deleteConfirm={deleteConfirm}
           />
         )}
@@ -766,14 +927,12 @@ export function VaultDashboard() {
             </span>
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px' }}>
-                Select a credential
+                Select an item
               </p>
-              <p style={{ fontSize: 13, margin: 0 }}>
-                Choose an item from the list to view its details.
-              </p>
+              <p style={{ fontSize: 13, margin: 0 }}>Choose an item from the list to view its details.</p>
             </div>
             <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 16 }}>
-              {entries.length} credential{entries.length !== 1 ? 's' : ''} · encrypted with AES-256-GCM
+              {counts.all} item{counts.all !== 1 ? 's' : ''} · encrypted with AES-256-GCM
             </p>
           </div>
         )}
@@ -918,19 +1077,24 @@ function FieldRow({ label, value, secret }: { label: string; value: string; secr
 
 function CredentialDetail({
   entry,
+  collections,
   onEdit,
   onDelete,
+  onRestore,
+  onToggleFavorite,
+  onMoveToCollection,
   deleteConfirm,
 }: {
   entry: VaultEntry
+  collections: Collection[]
   onEdit: (e: VaultEntry) => void
-  onDelete: (id: string) => void
+  onDelete: (e: VaultEntry) => void
+  onRestore: (id: string) => void
+  onToggleFavorite: (id: string) => void
+  onMoveToCollection: (id: string, collectionId: string | null) => void
   deleteConfirm: string | null
 }) {
-  const favicon = entry.url
-    ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(entry.url)}`
-    : null
-  const initials = entry.title.slice(0, 2).toUpperCase()
+  const trashed = !!entry.deletedAt
 
   return (
     <>
@@ -944,32 +1108,10 @@ function CredentialDetail({
           gap: 16,
         }}
       >
-        <span
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            background: 'var(--color-bg-brand-solid)',
-            color: '#fff',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 16,
-            fontWeight: 700,
-            flexShrink: 0,
-            overflow: 'hidden',
-          }}
-        >
-          {favicon ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={favicon} alt="" width={32} height={32} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-          ) : initials}
-        </span>
+        <EntryAvatar entry={entry} size={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 2px', letterSpacing: '-0.01em' }}>
-            {entry.title}
-          </h2>
-          {entry.url && (
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 2px', letterSpacing: '-0.01em' }}>{entry.title}</h2>
+          {entry.url && (entry.type === 'login' || entry.type === 'passkey') && (
             <a
               href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
               target="_blank"
@@ -981,24 +1123,63 @@ function CredentialDetail({
           )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {!trashed && (
+            <button
+              onClick={() => onToggleFavorite(entry.id)}
+              title={entry.favorite ? 'Unfavorite' : 'Favorite'}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-primary)',
+                color: entry.favorite ? 'var(--color-warning-solid, #f5a623)' : 'var(--color-text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Star01 size={15} style={entry.favorite ? { fill: 'currentColor' } : undefined} />
+            </button>
+          )}
+          {trashed ? (
+            <button
+              onClick={() => onRestore(entry.id)}
+              style={{
+                height: 32,
+                padding: '0 12px',
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-primary)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              onClick={() => onEdit(entry)}
+              style={{
+                height: 32,
+                padding: '0 12px',
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-primary)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Edit
+            </button>
+          )}
           <button
-            onClick={() => onEdit(entry)}
-            style={{
-              height: 32,
-              padding: '0 12px',
-              borderRadius: 6,
-              border: '1px solid var(--color-border-primary)',
-              background: 'var(--color-bg-primary)',
-              color: 'var(--color-text-secondary)',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(entry.id)}
+            onClick={() => onDelete(entry)}
             style={{
               height: 32,
               padding: '0 12px',
@@ -1011,16 +1192,39 @@ function CredentialDetail({
               cursor: 'pointer',
             }}
           >
-            {deleteConfirm === entry.id ? 'Confirm delete' : 'Delete'}
+            {deleteConfirm === entry.id ? (trashed ? 'Confirm delete' : 'Confirm trash') : trashed ? 'Delete forever' : 'Delete'}
           </button>
         </div>
       </div>
 
       {/* Fields */}
       <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
-        <FieldRow label="Username" value={entry.username} />
-        <FieldRow label="Password" value={entry.password} secret />
-        {entry.url && <FieldRow label="Website" value={entry.url} />}
+        {entry.type === 'login' && (
+          <>
+            <FieldRow label="Username" value={entry.username} />
+            <FieldRow label="Password" value={entry.password} secret />
+            {entry.url && <FieldRow label="Website" value={entry.url} />}
+          </>
+        )}
+
+        {entry.type === 'card' && (
+          <>
+            {entry.cardholder && <FieldRow label="Cardholder" value={entry.cardholder} />}
+            {entry.cardNumber && <FieldRow label="Card number" value={entry.cardNumber} secret />}
+            <div style={{ display: 'flex', gap: 16 }}>
+              {entry.expiry && <div style={{ flex: 1 }}><FieldRow label="Expiry" value={entry.expiry} /></div>}
+              {entry.cvv && <div style={{ flex: 1 }}><FieldRow label="CVV" value={entry.cvv} secret /></div>}
+            </div>
+          </>
+        )}
+
+        {entry.type === 'passkey' && (
+          <>
+            <FieldRow label="Relying party" value={entry.url} />
+            {entry.username && <FieldRow label="Username" value={entry.username} />}
+          </>
+        )}
+
         {entry.notes && (
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
@@ -1042,6 +1246,35 @@ function CredentialDetail({
             </div>
           </div>
         )}
+
+        {/* Collection assignment */}
+        {!trashed && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+              Collection
+            </div>
+            <select
+              value={entry.collectionId ?? ''}
+              onChange={(e) => onMoveToCollection(entry.id, e.target.value || null)}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                background: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-border-secondary)',
+                borderRadius: 8,
+                fontSize: 13,
+                color: 'var(--color-text-primary)',
+                outline: 'none',
+              }}
+            >
+              <option value="">No collection</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div
           style={{
             marginTop: 8,
@@ -1055,9 +1288,7 @@ function CredentialDetail({
           }}
         >
           <span>Created {new Date(entry.createdAt).toLocaleDateString()}</span>
-          {entry.updatedAt !== entry.createdAt && (
-            <span>Updated {new Date(entry.updatedAt).toLocaleDateString()}</span>
-          )}
+          {entry.updatedAt !== entry.createdAt && <span>Updated {new Date(entry.updatedAt).toLocaleDateString()}</span>}
         </div>
       </div>
     </>
@@ -1169,14 +1400,7 @@ function SettingsPanel({
         <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: '0 0 10px' }}>
           Save a copy of your encrypted vault as a <code>.rkpw</code> file.
         </p>
-        <Button
-          type="button"
-          onClick={handleExport}
-          isDisabled={exportLoading}
-          isLoading={exportLoading}
-          color="secondary"
-          size="sm"
-        >
+        <Button type="button" onClick={handleExport} isDisabled={exportLoading} isLoading={exportLoading} color="secondary" size="sm">
           💾 Export vault to file
         </Button>
       </div>
@@ -1206,14 +1430,7 @@ function SettingsPanel({
             ? 'Your vault can be recovered using your 12-word phrase.'
             : 'Without a recovery phrase, a forgotten master password means permanent data loss.'}
         </p>
-        <Button
-          type="button"
-          onClick={handleSetupRecovery}
-          isDisabled={recoveryLoading}
-          isLoading={recoveryLoading}
-          color="secondary"
-          size="sm"
-        >
+        <Button type="button" onClick={handleSetupRecovery} isDisabled={recoveryLoading} isLoading={recoveryLoading} color="secondary" size="sm">
           {hasRecovery ? '🔄 Rotate recovery phrase' : '🛡 Set up recovery phrase'}
         </Button>
         {error && (

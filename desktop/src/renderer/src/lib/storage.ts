@@ -7,7 +7,7 @@ export {
   listServerVaults,
   createServerVault,
   probeServer,
-  requestServerOtp,
+  loginServer,
   verifyServerOtp,
   inviteToVault,
 } from '../../../../../lib/storage'

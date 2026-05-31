@@ -21,7 +21,8 @@
   "permissions": [
     "storage",
     "clipboardWrite",
-    "activeTab"
+    "activeTab",
+    "webAuthenticationProxy"
   ],
   "host_permissions": [
     "<all_urls>"
