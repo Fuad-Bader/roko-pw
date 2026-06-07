@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { InstallButton } from './components/InstallButton'
 import { DownloadDesktop } from './components/DownloadDesktop'
+import { DownloadExtension } from './components/DownloadExtension'
 import { useTheme, ACCENTS } from './components/ThemeProvider'
 import {
   ShieldTick,
@@ -858,6 +859,41 @@ export default function LandingPage() {
           </p>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <DownloadDesktop />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Browser extension ── */}
+      <section id="extension" style={{ padding: '0 32px 96px', scrollMarginTop: 64 }}>
+        <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
+          <Badge>Browser extension</Badge>
+          <h2
+            style={{
+              fontFamily: 'var(--font-inter)',
+              fontWeight: 700,
+              fontSize: 36,
+              lineHeight: '44px',
+              letterSpacing: '-0.02em',
+              margin: '16px 0',
+            }}
+          >
+            Autofill, right in your browser.
+          </h2>
+          <p
+            style={{
+              fontSize: 18,
+              color: 'var(--color-text-tertiary)',
+              lineHeight: '28px',
+              margin: '0 auto 40px',
+              maxWidth: 560,
+            }}
+          >
+            Download the extension, unzip it, then open your browser&rsquo;s extensions page,
+            enable <strong>Developer mode</strong>, and choose <strong>Load unpacked</strong> —
+            point it at the unzipped folder.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <DownloadExtension />
           </div>
         </div>
       </section>
