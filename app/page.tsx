@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { InstallButton } from './components/InstallButton'
+import { DownloadDesktop } from './components/DownloadDesktop'
 import { useTheme, ACCENTS } from './components/ThemeProvider'
 import {
   ShieldTick,
@@ -192,10 +193,14 @@ export default function LandingPage() {
           <Logo size={28} />
 
           <nav style={{ display: 'flex', gap: 32, flex: 1, justifyContent: 'center' }}>
-            {['Features', 'Security', 'Pricing', 'Download'].map((l) => (
+            {[
+              { label: 'Features', href: '#features' },
+              { label: 'Security', href: '#security' },
+              { label: 'Download', href: '#download' },
+            ].map((l) => (
               <a
-                key={l}
-                href="#"
+                key={l.label}
+                href={l.href}
                 style={{
                   color: 'var(--color-text-secondary)',
                   fontSize: 14,
@@ -210,7 +215,7 @@ export default function LandingPage() {
                   ((e.target as HTMLElement).style.color = 'var(--color-text-secondary)')
                 }
               >
-                {l}
+                {l.label}
               </a>
             ))}
           </nav>
@@ -554,9 +559,11 @@ export default function LandingPage() {
 
       {/* ── Features ── */}
       <section
+        id="features"
         style={{
           padding: '96px 32px',
           background: 'var(--color-bg-secondary)',
+          scrollMarginTop: 64,
         }}
       >
         <div style={{ maxWidth: 1280, margin: '0 auto' }}>
@@ -626,7 +633,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Security ── */}
-      <section style={{ padding: '96px 32px' }}>
+      <section id="security" style={{ padding: '96px 32px', scrollMarginTop: 64 }}>
         <div
           style={{
             maxWidth: 1280,
@@ -821,8 +828,42 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Download desktop app ── */}
+      <section id="download" style={{ padding: '96px 32px', scrollMarginTop: 64 }}>
+        <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
+          <Badge>Desktop app</Badge>
+          <h2
+            style={{
+              fontFamily: 'var(--font-inter)',
+              fontWeight: 700,
+              fontSize: 36,
+              lineHeight: '44px',
+              letterSpacing: '-0.02em',
+              margin: '16px 0',
+            }}
+          >
+            Your vault, native on your desktop.
+          </h2>
+          <p
+            style={{
+              fontSize: 18,
+              color: 'var(--color-text-tertiary)',
+              lineHeight: '28px',
+              margin: '0 auto 40px',
+              maxWidth: 560,
+            }}
+          >
+            The same zero-knowledge vault, packaged as a standalone app. Your data is stored
+            encrypted on your machine — no browser required.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <DownloadDesktop />
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ── */}
-      <section style={{ padding: '96px 32px' }}>
+      <section id="get-started" style={{ padding: '96px 32px', scrollMarginTop: 64 }}>
         <div
           style={{
             maxWidth: 1280,
@@ -897,7 +938,7 @@ export default function LandingPage() {
             maxWidth: 1280,
             margin: '0 auto',
             display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
+            gridTemplateColumns: '1.5fr 1fr',
             gap: 32,
             marginBottom: 48,
           }}
@@ -918,9 +959,14 @@ export default function LandingPage() {
             </p>
           </div>
           {[
-            { h: 'Product', l: ['Features', 'Security', 'Pricing', 'Download', 'Changelog'] },
-            { h: 'Resources', l: ['Documentation', 'API', 'Status', 'Support'] },
-            { h: 'Legal', l: ['Privacy', 'Terms', 'Cookies'] },
+            {
+              h: 'Product',
+              l: [
+                { label: 'Features', href: '#features' },
+                { label: 'Security', href: '#security' },
+                { label: 'Download', href: '#download' },
+              ],
+            },
           ].map((g) => (
             <div key={g.h}>
               <div
@@ -934,17 +980,19 @@ export default function LandingPage() {
                 {g.h}
               </div>
               {g.l.map((l) => (
-                <div
-                  key={l}
+                <a
+                  key={l.label}
+                  href={l.href}
                   style={{
+                    display: 'block',
                     fontSize: 14,
                     color: 'var(--color-text-secondary)',
                     marginBottom: 12,
-                    cursor: 'pointer',
+                    textDecoration: 'none',
                   }}
                 >
-                  {l}
-                </div>
+                  {l.label}
+                </a>
               ))}
             </div>
           ))}

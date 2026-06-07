@@ -18,6 +18,19 @@ const inputCls =
 
 const labelCls = 'mb-1 block text-xs font-medium text-tertiary'
 
+/** Digits only, max 19 (longest PAN), grouped in blocks of 4 → "1234 5678 9012 3456". */
+const formatCardNumber = (v: string) =>
+  v.replace(/\D/g, '').slice(0, 19).replace(/(.{4})/g, '$1 ').trim()
+
+/** Digits only, max 4, with a slash after the month → "08/27". */
+const formatExpiry = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 4)
+  return d.length <= 2 ? d : `${d.slice(0, 2)}/${d.slice(2)}`
+}
+
+/** Digits only, max 4 (Amex uses 4, everyone else 3). */
+const formatCvv = (v: string) => v.replace(/\D/g, '').slice(0, 4)
+
 const TYPE_OPTIONS: { id: EntryType; label: string; icon: string }[] = [
   { id: 'login', label: 'Login', icon: '🔑' },
   { id: 'card', label: 'Card', icon: '💳' },
@@ -144,16 +157,16 @@ export function CredentialForm({ initial, defaultType, onSave, onCancel }: Props
           </div>
           <div>
             <label className={labelCls} htmlFor="cf-cardnumber">Card number *</label>
-            <input id="cf-cardnumber" className={`${inputCls} font-mono`} inputMode="numeric" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} placeholder="1234 5678 9012 3456" />
+            <input id="cf-cardnumber" className={`${inputCls} font-mono`} inputMode="numeric" maxLength={23} value={cardNumber} onChange={(e) => setCardNumber(formatCardNumber(e.target.value))} placeholder="1234 5678 9012 3456" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls} htmlFor="cf-expiry">Expiry (MM/YY)</label>
-              <input id="cf-expiry" className={`${inputCls} font-mono`} value={expiry} onChange={(e) => setExpiry(e.target.value)} placeholder="08/27" />
+              <input id="cf-expiry" className={`${inputCls} font-mono`} inputMode="numeric" maxLength={5} value={expiry} onChange={(e) => setExpiry(formatExpiry(e.target.value))} placeholder="08/27" />
             </div>
             <div>
               <label className={labelCls} htmlFor="cf-cvv">CVV</label>
-              <input id="cf-cvv" className={`${inputCls} font-mono`} inputMode="numeric" value={cvv} onChange={(e) => setCvv(e.target.value)} placeholder="123" />
+              <input id="cf-cvv" className={`${inputCls} font-mono`} inputMode="numeric" maxLength={4} value={cvv} onChange={(e) => setCvv(formatCvv(e.target.value))} placeholder="123" />
             </div>
           </div>
         </>

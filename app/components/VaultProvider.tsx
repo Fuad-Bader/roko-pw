@@ -118,6 +118,12 @@ interface VaultContextValue {
    * opens it unlocked. Shows the recovery phrase via the dashboard modal.
    */
   initRemoteVault: (vaultId: string, password: string) => Promise<void>
+  /**
+   * Upload the currently-open vault to the connected server: creates a new
+   * server vault, pushes the current entries (encrypted with the existing key,
+   * so the same master password unlocks it), and switches to remote sync.
+   */
+  uploadVaultToServer: (name: string) => Promise<VaultMeta>
   /** Invite a user to the current vault by email (sends them the vault password). */
   inviteUser: (email: string, vaultPassword: string) => Promise<void>
 }
@@ -697,6 +703,26 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setStatus('unlocked')
   }, [])
 
+  const uploadVaultToServer = useCallback(async (name: string): Promise<VaultMeta> => {
+    setError(null)
+    if (!cryptoKey || !vaultSalt) throw new Error('Unlock your vault before uploading.')
+    const session = readSession()
+    if (!session) throw new Error('Not connected to a server')
+    // Create a fresh vault on the server to hold this data.
+    const vault = await createServerVault(remoteConfig(session)!, name.trim() || 'My Vault')
+    // Re-encrypt the current entries against the new remote target. We reuse the
+    // existing key + salt (and any recovery blob) so the same master password
+    // continues to unlock the vault after the switch.
+    const existing = await loadVault(settings.backend, settings.vaultId, remoteConfig(session))
+    const remote: VaultSettings = { backend: 'remote', vaultId: vault.id, serverUrl: session.serverUrl }
+    await persist(cryptoKey, vaultSalt, entries, collections, remote, session, existing)
+    // Point the app at the remote vault for all subsequent loads/saves.
+    writeSettings(remote)
+    setSettings(remote)
+    setServerVaults((prev) => [vault, ...prev])
+    return vault
+  }, [cryptoKey, vaultSalt, entries, collections, settings, persist])
+
   const inviteUser = useCallback(async (email: string, vaultPassword: string) => {
     const s = readSettings()
     const session = readSession()
@@ -754,6 +780,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         createServerVault: handleCreateServerVault,
         serverVaultHasData,
         initRemoteVault,
+        uploadVaultToServer,
         inviteUser,
       }}
     >

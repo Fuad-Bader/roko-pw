@@ -7,6 +7,7 @@ import { useTheme, ACCENTS } from './ThemeProvider'
 import { CredentialForm } from './CredentialForm'
 import { PasswordGenerator } from './PasswordGenerator'
 import { RecoveryPhraseDisplay } from './RecoveryPhraseDisplay'
+import { UploadToServer } from './UploadToServer'
 import { Button } from '@/components/base/buttons/button'
 import { ModalOverlay, Modal, Dialog } from '@/components/application/modals/modal'
 import {
@@ -1314,10 +1315,16 @@ function SettingsPanel({
   error: string | null
   clearError: () => void
 }) {
+  const { serverSession, logoutServer } = useVault()
   const [vaultIdInput, setVaultIdInput] = useState(settings.vaultId)
   const [saved, setSaved] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
   const [recoveryLoading, setRecoveryLoading] = useState(false)
+  // Reveal the server-connection sub-panel. True whenever the live backend is
+  // already remote, or the user taps "Remote" to start connecting.
+  const [showRemote, setShowRemote] = useState(settings.backend === 'remote')
+  // Show the connect-and-upload flow inside the remote sub-panel.
+  const [uploading, setUploading] = useState(false)
 
   const sectionTitle = (label: string) => (
     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
@@ -1348,24 +1355,73 @@ function SettingsPanel({
       <div>
         {sectionTitle('Storage backend')}
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          {(['local', 'remote'] as const).map((b) => (
-            <Button
-              key={b}
-              type="button"
-              onClick={() => onApply({ backend: b })}
-              color={settings.backend === b ? 'primary' : 'secondary'}
-              size="sm"
-              className="flex-1"
-            >
-              {b === 'local' ? '💾 Local' : '☁️ Remote'}
-            </Button>
-          ))}
+          <Button
+            type="button"
+            onClick={() => {
+              setShowRemote(false)
+              if (settings.backend === 'remote') onApply({ backend: 'local' }).catch(() => {})
+            }}
+            color={!showRemote ? 'primary' : 'secondary'}
+            size="sm"
+            className="flex-1"
+          >
+            💾 Local
+          </Button>
+          <Button
+            type="button"
+            onClick={() => setShowRemote(true)}
+            color={showRemote ? 'primary' : 'secondary'}
+            size="sm"
+            className="flex-1"
+          >
+            ☁️ Remote
+          </Button>
         </div>
         <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: 0 }}>
-          {settings.backend === 'local'
+          {!showRemote
             ? 'Vault is stored in this browser only.'
             : 'Encrypted vault blob is synced to the server. The server never sees your passwords.'}
         </p>
+
+        {showRemote && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 8,
+              border: '1px solid var(--color-border-secondary)',
+              background: 'var(--color-bg-secondary)',
+            }}
+          >
+            {settings.backend === 'remote' ? (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 2 }}>
+                  ☁️ Synced to <span style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{serverSession?.serverUrl ?? settings.serverUrl}</span>
+                </div>
+                {serverSession && (
+                  <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 10 }}>
+                    Signed in as {serverSession.email}
+                  </div>
+                )}
+                <Button type="button" onClick={() => logoutServer()} color="secondary" size="sm">
+                  Disconnect
+                </Button>
+              </>
+            ) : uploading ? (
+              <UploadToServer onClose={() => setUploading(false)} />
+            ) : (
+              <>
+                <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: '0 0 10px' }}>
+                  Upload an encrypted copy of this vault to a sync server so you can reach it from other devices.
+                  {serverSession ? ` Connected to ${serverSession.serverUrl}.` : ''}
+                </p>
+                <Button type="button" onClick={() => { clearError(); setUploading(true) }} color="primary" size="sm">
+                  ⬆ Upload this vault to a sync server
+                </Button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Vault ID */}
