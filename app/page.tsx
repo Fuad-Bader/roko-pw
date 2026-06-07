@@ -43,7 +43,7 @@ function Logo({ size = 28 }: { size?: number }) {
           color: 'var(--color-text-primary)',
         }}
       >
-        Roko<span style={{ color: 'var(--color-bg-brand-solid)' }}>PW</span>
+        Lila<span style={{ color: 'var(--color-bg-brand-solid)' }}>Crypt</span>
       </span>
     </span>
   )
@@ -113,7 +113,7 @@ const FEATURES = [
   {
     icon: Lightning01,
     title: 'One-tap autofill',
-    desc: 'Tap a field on any site. RokoPW detects it, fills it, and updates passwords when they change. No copy-paste.',
+    desc: 'Tap a field on any site. LilaCrypt detects it, fills it, and updates passwords when they change. No copy-paste.',
   },
   {
     icon: Users01,
@@ -348,7 +348,7 @@ export default function LandingPage() {
             margin: '0 auto 40px',
           }}
         >
-          RokoPW encrypts your logins, cards and notes end-to-end on your device — then syncs them
+          LilaCrypt encrypts your logins, cards and notes end-to-end on your device — then syncs them
           everywhere you sign in. Free for individuals, forever.
         </p>
 
@@ -789,7 +789,7 @@ export default function LandingPage() {
                 margin: '0 0 16px',
               }}
             >
-              How RokoPW protects you.
+              How LilaCrypt protects you.
             </h2>
             <p style={{ fontSize: 18, color: 'var(--color-brand-200)', maxWidth: 560, margin: '0 auto' }}>
               Four layers between an attacker and your data. Each independently verifiable.
@@ -1010,7 +1010,7 @@ export default function LandingPage() {
             gap: 12,
           }}
         >
-          <span>© 2026 RokoPW. Zero-trust. Open source.</span>
+          <span>© 2026 LilaCrypt. Zero-trust. Open source.</span>
           <span>Encrypted with AES-256-GCM · PBKDF2-SHA256 · Web Crypto API</span>
         </div>
       </footer>

@@ -22,8 +22,8 @@ export function RecoveryPhraseDisplay({ words, onConfirmed }: Props) {
 
   const download = () => {
     const text = [
-      'RokoPW Recovery Phrase',
-      '======================',
+      'LilaCrypt Recovery Phrase',
+      '=========================',
       '',
       'Keep this file in a secure location (e.g. printed on paper or a USB drive).',
       'Anyone with these words can recover access to your vault.',
@@ -37,7 +37,7 @@ export function RecoveryPhraseDisplay({ words, onConfirmed }: Props) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'roko-recovery-phrase.txt'
+    a.download = 'lilacrypt-recovery-phrase.txt'
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -52,7 +52,7 @@ export function RecoveryPhraseDisplay({ words, onConfirmed }: Props) {
         <p className="mt-1 text-xs leading-relaxed text-warning-primary/80">
           Write these 12 words down and store them somewhere safe — offline, on paper, or on a USB
           drive. They are the <strong>only way</strong> to recover your vault if you forget your
-          master password. RokoPW cannot recover them for you.
+          master password. LilaCrypt cannot recover them for you.
         </p>
       </div>
 

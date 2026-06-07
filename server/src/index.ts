@@ -29,7 +29,7 @@ app.use('*', logger())
 // Health / server identity
 app.get('/', (c) =>
   c.json({
-    name: 'RokoPW Server',
+    name: 'LilaCrypt Server',
     version: '0.1.0',
     // Clients use this to confirm they reached a RokoPW server
     kind: 'roko-pw-server',
@@ -47,6 +47,6 @@ app.onError((err, c) => {
 })
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`RokoPW server running at http://localhost:${info.port}`)
+  console.log(`LilaCrypt server running at http://localhost:${info.port}`)
   console.log(`Configure SMTP in .env to enable email (login codes + invite notifications).`)
 })

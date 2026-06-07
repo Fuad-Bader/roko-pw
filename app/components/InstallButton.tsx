@@ -107,14 +107,14 @@ function InstallModal({ browser, onClose }: { browser: Browser; onClose: () => v
     <>Open <strong className="text-primary">{meta.label.replace('Add to ', '')}</strong> and navigate to <code className="rounded bg-tertiary px-1 text-brand-400">chrome://extensions</code></>,
     <>Enable <strong className="text-primary">Developer mode</strong> using the toggle in the top-right corner</>,
     <>Click <strong className="text-primary">Load unpacked</strong> and select the <code className="rounded bg-tertiary px-1 text-brand-400">extension/</code> folder from this project</>,
-    <>The <strong className="text-primary">Roko</strong> icon will appear in your toolbar — click it to get started</>,
+    <>The <strong className="text-primary">LilaCrypt</strong> icon will appear in your toolbar — click it to get started</>,
   ]
 
   const firefoxSteps = [
     <>Open Firefox and navigate to <code className="rounded bg-tertiary px-1 text-brand-400">about:debugging#/runtime/this-firefox</code></>,
     <>Click <strong className="text-primary">Load Temporary Add-on…</strong></>,
     <>Select the <code className="rounded bg-tertiary px-1 text-brand-400">extension/manifest.json</code> file from this project</>,
-    <>The <strong className="text-primary">Roko</strong> icon will appear in your toolbar</>,
+    <>The <strong className="text-primary">LilaCrypt</strong> icon will appear in your toolbar</>,
   ]
 
   const steps = meta.chromium ? chromiumSteps : firefoxSteps

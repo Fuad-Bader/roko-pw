@@ -44,7 +44,7 @@ function Logo({ size = 28, light = false }: { size?: number; light?: boolean }) 
           color: light ? '#fff' : 'var(--color-text-primary)',
         }}
       >
-        Roko<span style={{ color: light ? 'rgba(255,255,255,.7)' : 'var(--color-bg-brand-solid)' }}>PW</span>
+        Lila<span style={{ color: light ? 'rgba(255,255,255,.7)' : 'var(--color-bg-brand-solid)' }}>Crypt</span>
       </span>
     </span>
   )

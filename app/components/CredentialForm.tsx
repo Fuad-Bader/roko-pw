@@ -184,7 +184,7 @@ export function CredentialForm({ initial, defaultType, onSave, onCancel }: Props
             <input id="cf-pk-user" className={inputCls} autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="you@example.com" />
           </div>
           <p className="rounded-lg bg-tertiary px-3 py-2 text-xs text-tertiary">
-            Stored as a reference. Creating & using passkeys on other sites needs the RokoPW browser extension.
+            Stored as a reference. Creating & using passkeys on other sites needs the LilaCrypt browser extension.
           </p>
         </>
       )}

@@ -63,10 +63,10 @@ ipcMain.handle('vault:save', (_event, vault: unknown) => {
 
 ipcMain.handle('vault:export', async (_event, vault: unknown) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
-    title: 'Export RokoPW Vault',
-    defaultPath: 'roko-vault.rkpw',
+    title: 'Export LilaCrypt Vault',
+    defaultPath: 'lilacrypt-vault.rkpw',
     filters: [
-      { name: 'RokoPW Vault', extensions: ['rkpw'] },
+      { name: 'LilaCrypt Vault', extensions: ['rkpw'] },
       { name: 'JSON', extensions: ['json'] },
     ],
   })
@@ -90,8 +90,8 @@ ipcMain.handle('window:isMaximized', (e) => e.sender.getOwnerBrowserWindow()?.is
 
 ipcMain.handle('vault:import', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: 'Open RokoPW Vault',
-    filters: [{ name: 'RokoPW Vault', extensions: ['rkpw', 'json'] }],
+    title: 'Open LilaCrypt Vault',
+    filters: [{ name: 'LilaCrypt Vault', extensions: ['rkpw', 'json'] }],
     properties: ['openFile'],
   })
   if (canceled || !filePaths[0]) return null

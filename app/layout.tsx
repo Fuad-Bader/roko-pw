@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RokoPW – Zero-Trust Password Manager",
+  title: "LilaCrypt – Zero-Trust Password Manager",
   description:
     "A zero-trust password manager. All encryption happens in your browser with AES-256-GCM. The server never sees your passwords.",
 };

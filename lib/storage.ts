@@ -117,8 +117,8 @@ export async function probeServer(url: string): Promise<string> {
   const res = await fetch(`${url.replace(/\/$/, '')}/`, { signal: AbortSignal.timeout(8000) })
   if (!res.ok) throw new Error(`Server returned ${res.status}`)
   const body = await res.json() as { kind?: string; name?: string }
-  if (body.kind !== 'roko-pw-server') throw new Error('URL does not point to a RokoPW server')
-  return body.name ?? 'RokoPW Server'
+  if (body.kind !== 'roko-pw-server') throw new Error('URL does not point to a LilaCrypt server')
+  return body.name ?? 'LilaCrypt Server'
 }
 
 /**
@@ -187,7 +187,7 @@ export async function deleteLocalVault(): Promise<void> {
 // ─── File System Access API (with <input type=file> fallback) ─────────────────
 
 const FILE_OPTS = {
-  description: 'RokoPW Vault',
+  description: 'LilaCrypt Vault',
   accept: { 'application/json': ['.rkpw', '.json'] },
 } as const
 
@@ -204,7 +204,7 @@ export async function exportVaultToFile(vault: EncryptedVault): Promise<void> {
     const handle = await (
       window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> }
     ).showSaveFilePicker({
-      suggestedName: 'roko-vault.rkpw',
+      suggestedName: 'lilacrypt-vault.rkpw',
       types: [{ description: FILE_OPTS.description, accept: FILE_OPTS.accept }],
     })
     const writable = await handle.createWritable()
@@ -216,7 +216,7 @@ export async function exportVaultToFile(vault: EncryptedVault): Promise<void> {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'roko-vault.rkpw'
+    a.download = 'lilacrypt-vault.rkpw'
     document.body.appendChild(a)
     a.click()
     a.remove()

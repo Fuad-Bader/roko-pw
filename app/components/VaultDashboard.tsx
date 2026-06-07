@@ -94,7 +94,7 @@ function Logo({ size = 24 }: { size?: number }) {
           color: 'var(--color-text-primary)',
         }}
       >
-        Roko<span style={{ color: 'var(--color-bg-brand-solid)' }}>PW</span>
+        Lila<span style={{ color: 'var(--color-bg-brand-solid)' }}>Crypt</span>
       </span>
     </span>
   )
@@ -635,11 +635,11 @@ export function VaultDashboard() {
                 flexShrink: 0,
               }}
             >
-              RP
+              LC
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                RokoPW Vault
+                LilaCrypt Vault
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                 {settings.backend === 'remote' ? '☁ Remote sync' : '💾 Local'}

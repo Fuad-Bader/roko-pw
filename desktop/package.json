@@ -1,7 +1,7 @@
 {
   "name": "roko-pw-desktop",
   "version": "0.1.0",
-  "description": "RokoPW – Zero-trust password manager",
+  "description": "LilaCrypt – Zero-trust password manager",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
@@ -35,7 +35,7 @@
   },
   "build": {
     "appId": "com.rokopw.desktop",
-    "productName": "RokoPW",
+    "productName": "LilaCrypt",
     "copyright": "Copyright © 2026",
     "directories": {
       "output": "dist",
@@ -68,7 +68,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "RokoPW-Setup-${version}.${ext}"
+      "artifactName": "LilaCrypt-Setup-${version}.${ext}"
     }
   }
 }

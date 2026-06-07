@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Roko – Zero-Trust Password Manager",
+  "name": "LilaCrypt – Zero-Trust Password Manager",
   "version": "1.0.0",
   "description": "Autofill passwords from your AES-256-GCM encrypted vault. The master password never leaves your device.",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "RokoPW – Password Manager"
+    "default_title": "LilaCrypt – Password Manager"
   },
   "background": {
     "service_worker": "background.js",

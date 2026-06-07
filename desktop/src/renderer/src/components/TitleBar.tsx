@@ -55,7 +55,7 @@ export function TitleBar() {
     >
       {/* App name */}
       <span className="text-xs font-semibold tracking-wide text-quaternary">
-        Roko<span className="text-brand-400">PW</span>
+        Lila<span className="text-brand-400">Crypt</span>
       </span>
 
       {/* Window controls */}

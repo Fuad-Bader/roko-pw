@@ -27,7 +27,7 @@
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.id = BUTTON_ID
-    btn.title = 'Roko: autofill password'
+    btn.title = 'LilaCrypt: autofill password'
     btn.textContent = '🔐'
     btn.style.cssText = [
       'position:absolute',
@@ -63,7 +63,7 @@
     })
 
     if (response.error) {
-      showToast(response.error === 'Vault is locked.' ? '🔒 Unlock Roko first' : response.error, 'error')
+      showToast(response.error === 'Vault is locked.' ? '🔒 Unlock LilaCrypt first' : response.error, 'error')
       return
     }
 
