@@ -50,6 +50,13 @@ interface VaultContextValue {
   settings: VaultSettings
   error: string | null
 
+  /**
+   * The in-memory AES vault key while unlocked, else null. Surfaced so the
+   * browser extension can hand it to its background worker for autofill; the
+   * web and desktop apps ignore it. Keys are extractable (see lib/crypto.ts).
+   */
+  cryptoKey: CryptoKey | null
+
   needsNewPassword: boolean
   recoveryPhrase: string[] | null
 
@@ -745,6 +752,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         collections,
         settings,
         error,
+        cryptoKey,
         needsNewPassword,
         recoveryPhrase,
         hasRecovery,

@@ -20,6 +20,19 @@ That command:
 Until you run it, the landing page's download button shows "Desktop app coming
 soon" — it degrades gracefully when no manifest is present.
 
+## Browser extension
+
+The landing page also offers the browser extension as a zip. It's **built**
+(Vite) before packing, and is also git-ignored. Generate it with:
+
+```bash
+npm run pack:extension
+```
+
+That runs `npm run build:extension` (→ `extension/dist`), zips the built output
+to `lilacrypt-extension.zip` here, and writes `extension.json`. Users unzip it
+and **Load unpacked** the resulting folder in Chrome/Edge.
+
 ## Other platforms
 
 macOS (`.dmg`) and Linux (`.AppImage`) targets are already configured in

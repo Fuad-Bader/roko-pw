@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["chrome", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/lib/storage": ["./ui/lib/storage.ts"],
+      "@/lib/*": ["../lib/*"],
+      "@/*": ["../*"],
+      "@components/*": ["../app/components/*"]
+    }
+  },
+  "include": ["ui/**/*", "vite.config.ts"]
+}

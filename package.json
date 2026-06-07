@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "pack:extension": "node scripts/pack-extension.js"
+    "dev:extension": "vite -c extension/vite.config.ts",
+    "build:extension": "vite build -c extension/vite.config.ts",
+    "pack:extension": "npm run build:extension && node scripts/pack-extension.js"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -22,13 +24,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tailwindcss/vite": "^4",
+    "@types/chrome": "^0.0.270",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "postcss": "^8.5.14",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^6.0.7"
   }
 }

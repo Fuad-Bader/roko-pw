@@ -210,6 +210,15 @@
     findPasswordFields().forEach(injectAutofillButton)
   }
 
+  // ─── Fill on request from the popup ───────────────────────────────────────
+  // The popup picks an entry and asks us to fill the page's login form.
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'FILL_FORM' && msg.entry) {
+      const pwField = document.querySelector('input[type="password"]')
+      if (pwField) fillForm(pwField, msg.entry)
+    }
+  })
+
   scanAndInject()
 
   const observer = new MutationObserver(() => scanAndInject())
