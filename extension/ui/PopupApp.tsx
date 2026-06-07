@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useVault, VaultProvider } from '@components/VaultProvider'
 import { ThemeProvider } from '@components/ThemeProvider'
 import type { VaultEntry } from '@/lib/types'
-import { useAutofillBridge } from './useAutofillBridge'
+import { useAutofillBridge, loadSessionKey } from './useAutofillBridge'
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -221,7 +221,7 @@ function Router() {
 export function PopupApp() {
   return (
     <ThemeProvider>
-      <VaultProvider>
+      <VaultProvider restoreKey={loadSessionKey}>
         <div style={S.shell}>
           <Router />
         </div>

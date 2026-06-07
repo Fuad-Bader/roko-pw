@@ -2,7 +2,7 @@ import { useVault, VaultProvider } from '@components/VaultProvider'
 import { ThemeProvider } from '@components/ThemeProvider'
 import { UnlockScreen } from '@components/UnlockScreen'
 import { VaultDashboard } from '@components/VaultDashboard'
-import { useAutofillBridge } from './useAutofillBridge'
+import { useAutofillBridge, loadSessionKey } from './useAutofillBridge'
 
 // Mirrors desktop/src/renderer/src/App.tsx: reuse the web vault UI unchanged.
 function VaultRouter() {
@@ -24,7 +24,7 @@ function VaultRouter() {
 export function VaultApp() {
   return (
     <ThemeProvider>
-      <VaultProvider>
+      <VaultProvider restoreKey={loadSessionKey}>
         <div className="flex h-screen flex-col overflow-hidden bg-primary text-primary">
           <VaultRouter />
         </div>

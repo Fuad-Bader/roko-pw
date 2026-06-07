@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -22,6 +23,7 @@ import {
   decryptData,
   deriveKey,
   encryptData,
+  importRawKey,
   randomSalt,
   wrapKey,
   unwrapKey,
@@ -237,7 +239,20 @@ function parseVaultData(json: string): { entries: VaultEntry[]; collections: Col
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-export function VaultProvider({ children }: { children: ReactNode }) {
+export function VaultProvider({
+  children,
+  restoreKey,
+}: {
+  children: ReactNode
+  /**
+   * Optional: returns a previously-cached raw vault key (base64) to rehydrate an
+   * unlocked session on mount, or null if none. The browser extension supplies
+   * this from chrome.storage.session — which survives popup/tab close but is
+   * cleared when the browser quits — so the vault stays unlocked across popup
+   * opens yet relocks on browser exit. The web/desktop apps omit it.
+   */
+  restoreKey?: () => Promise<string | null>
+}) {
   const [status, setStatus] = useState<VaultStatus>('checking')
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null)
   const [vaultSalt, setVaultSalt] = useState('')
@@ -253,18 +268,58 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [serverVaults, setServerVaults] = useState<VaultMeta[]>([])
   const [serverLoading, setServerLoading] = useState(false)
 
+  // Hold restoreKey in a ref so the init effect runs exactly once even if the
+  // caller passes a fresh function reference each render.
+  const restoreKeyRef = useRef(restoreKey)
+  restoreKeyRef.current = restoreKey
+
   useEffect(() => {
     const s = readSettings()
     setSettings(s)
     const session = readSession()
     setServerSession(session)
     const rc = remoteConfig(session)
-    loadVault(s.backend, s.vaultId, rc)
-      .then((v) => {
-        setStatus(v ? 'locked' : 'empty')
-        setHasRecovery(!!v?.recovery)
-      })
-      .catch(() => setStatus('empty'))
+    let cancelled = false
+    ;(async () => {
+      try {
+        const v = await loadVault(s.backend, s.vaultId, rc)
+        if (cancelled) return
+        if (!v) {
+          setStatus('empty')
+          return
+        }
+        setHasRecovery(!!v.recovery)
+        // Rehydrate an unlocked session if one is still cached (extension only).
+        const getKey = restoreKeyRef.current
+        if (getKey) {
+          try {
+            const raw = await getKey()
+            if (cancelled) return
+            if (raw) {
+              const key = await importRawKey(raw)
+              const { entries: data, collections: cols } = parseVaultData(
+                await decryptData(key, v.iv, v.ciphertext),
+              )
+              if (cancelled) return
+              setCryptoKey(key)
+              setVaultSalt(v.salt)
+              setEntries(data)
+              setCollections(cols)
+              setStatus('unlocked')
+              return
+            }
+          } catch {
+            // Stale or invalid cached key — fall through to the locked screen.
+          }
+        }
+        setStatus('locked')
+      } catch {
+        if (!cancelled) setStatus('empty')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // ─── Persist helper ────────────────────────────────────────────────────────

@@ -8,6 +8,21 @@ import { exportKey } from '@/lib/crypto'
  * decrypt the vault for autofill / passkeys when no UI page is open. We export
  * the raw key on unlock and remove it on lock.
  */
+/**
+ * Read the raw vault key cached in chrome.storage.session, if the browser is
+ * still open (session storage is wiped when the browser quits). Passed to
+ * <VaultProvider restoreKey={…}> so the popup/vault page reopens already
+ * unlocked instead of prompting for the master password every time.
+ */
+export async function loadSessionKey(): Promise<string | null> {
+  try {
+    const { rokoKey } = await chrome.storage.session.get('rokoKey')
+    return rokoKey ?? null
+  } catch {
+    return null
+  }
+}
+
 export function useAutofillBridge(): void {
   const { cryptoKey } = useVault()
   useEffect(() => {

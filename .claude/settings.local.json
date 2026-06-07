@@ -23,7 +23,10 @@
       "PowerShell(try { $r = Invoke-RestMethod -Uri \"https://api.github.com/repos/GoogleChrome/chrome-extensions-samples/git/trees/main?recursive=1\" -Headers @{ \"User-Agent\" = \"roko\" } -TimeoutSec 20; \\($r.tree | Where-Object { $_.path -match \"ebAuthentication\" } | Select-Object -ExpandProperty path\\) } catch { \"ERR: $\\($_.Exception.Message\\)\" })",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('manifest.json','utf8'\\)\\); console.log\\('manifest.json valid'\\)\")",
       "Bash(node _test_passkeys.mjs)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(ls extension/dist)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const d={...p.dependencies,...p.devDependencies}; for\\(const k of ['vite','@vitejs/plugin-react','@tailwindcss/vite']\\) console.log\\(k, d[k]||'MISSING'\\)\")"
     ]
   }
 }
