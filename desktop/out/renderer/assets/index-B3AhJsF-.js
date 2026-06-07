@@ -12574,8 +12574,8 @@ async function probeServer(url) {
   const res = await fetch(`${url.replace(/\/$/, "")}/`, { signal: AbortSignal.timeout(8e3) });
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
   const body = await res.json();
-  if (body.kind !== "roko-pw-server") throw new Error("URL does not point to a RokoPW server");
-  return body.name ?? "RokoPW Server";
+  if (body.kind !== "roko-pw-server") throw new Error("URL does not point to a LilaCrypt server");
+  return body.name ?? "LilaCrypt Server";
 }
 async function loginServer(serverUrl, email, password) {
   const res = await fetch(`${serverUrl}/api/auth/login`, {
@@ -22437,8 +22437,8 @@ function Logo$1({ size = 28, light = false }) {
           color: light ? "#fff" : "var(--color-text-primary)"
         },
         children: [
-          "Roko",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: light ? "rgba(255,255,255,.7)" : "var(--color-bg-brand-solid)" }, children: "PW" })
+          "Lila",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: light ? "rgba(255,255,255,.7)" : "var(--color-bg-brand-solid)" }, children: "Crypt" })
         ]
       }
     )
@@ -23200,7 +23200,7 @@ function CredentialForm({ initial, defaultType, onSave, onCancel }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: labelCls, htmlFor: "cf-pk-user", children: "Username" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "cf-pk-user", className: inputCls$1, autoComplete: "off", value: username, onChange: (e) => setUsername(e.target.value), placeholder: "you@example.com" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg bg-tertiary px-3 py-2 text-xs text-tertiary", children: "Stored as a reference. Creating & using passkeys on other sites needs the RokoPW browser extension." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg bg-tertiary px-3 py-2 text-xs text-tertiary", children: "Stored as a reference. Creating & using passkeys on other sites needs the LilaCrypt browser extension." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: labelCls, htmlFor: "cf-notes", children: "Notes" }),
@@ -23285,8 +23285,8 @@ function RecoveryPhraseDisplay({ words, onConfirmed }) {
   };
   const download = () => {
     const text = [
-      "RokoPW Recovery Phrase",
-      "======================",
+      "LilaCrypt Recovery Phrase",
+      "=========================",
       "",
       "Keep this file in a secure location (e.g. printed on paper or a USB drive).",
       "Anyone with these words can recover access to your vault.",
@@ -23299,7 +23299,7 @@ function RecoveryPhraseDisplay({ words, onConfirmed }) {
     const url = URL.createObjectURL(blob);
     const a2 = document.createElement("a");
     a2.href = url;
-    a2.download = "roko-recovery-phrase.txt";
+    a2.download = "lilacrypt-recovery-phrase.txt";
     document.body.appendChild(a2);
     a2.click();
     a2.remove();
@@ -23311,7 +23311,7 @@ function RecoveryPhraseDisplay({ words, onConfirmed }) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs leading-relaxed text-warning-primary/80", children: [
         "Write these 12 words down and store them somewhere safe — offline, on paper, or on a USB drive. They are the ",
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "only way" }),
-        " to recover your vault if you forget your master password. RokoPW cannot recover them for you."
+        " to recover your vault if you forget your master password. LilaCrypt cannot recover them for you."
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-3 gap-2", children: words.map((word, i2) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -23641,8 +23641,8 @@ function Logo({ size = 24 }) {
           color: "var(--color-text-primary)"
         },
         children: [
-          "Roko",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "var(--color-bg-brand-solid)" }, children: "PW" })
+          "Lila",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "var(--color-bg-brand-solid)" }, children: "Crypt" })
         ]
       }
     )
@@ -24171,11 +24171,11 @@ function VaultDashboard() {
                                 fontWeight: 700,
                                 flexShrink: 0
                               },
-                              children: "RP"
+                              children: "LC"
                             }
                           ),
                           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: "RokoPW Vault" }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: "LilaCrypt Vault" }),
                             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 11, color: "var(--color-text-tertiary)" }, children: settings.backend === "remote" ? "☁ Remote sync" : "💾 Local" })
                           ] }),
                           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -25039,8 +25039,8 @@ function TitleBar() {
       className: "flex h-10 w-full shrink-0 select-none items-center justify-between bg-secondary pl-4 pr-1 [-webkit-app-region:drag]",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-semibold tracking-wide text-quaternary", children: [
-          "Roko",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-400", children: "PW" })
+          "Lila",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-400", children: "Crypt" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-0.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(

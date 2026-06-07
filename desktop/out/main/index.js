@@ -52,10 +52,10 @@ electron.ipcMain.handle("vault:save", (_event, vault) => {
 });
 electron.ipcMain.handle("vault:export", async (_event, vault) => {
   const { canceled, filePath } = await electron.dialog.showSaveDialog({
-    title: "Export RokoPW Vault",
-    defaultPath: "roko-vault.rkpw",
+    title: "Export LilaCrypt Vault",
+    defaultPath: "lilacrypt-vault.rkpw",
     filters: [
-      { name: "RokoPW Vault", extensions: ["rkpw"] },
+      { name: "LilaCrypt Vault", extensions: ["rkpw"] },
       { name: "JSON", extensions: ["json"] }
     ]
   });
@@ -73,8 +73,8 @@ electron.ipcMain.handle("window:close", (e) => e.sender.getOwnerBrowserWindow()?
 electron.ipcMain.handle("window:isMaximized", (e) => e.sender.getOwnerBrowserWindow()?.isMaximized() ?? false);
 electron.ipcMain.handle("vault:import", async () => {
   const { canceled, filePaths } = await electron.dialog.showOpenDialog({
-    title: "Open RokoPW Vault",
-    filters: [{ name: "RokoPW Vault", extensions: ["rkpw", "json"] }],
+    title: "Open LilaCrypt Vault",
+    filters: [{ name: "LilaCrypt Vault", extensions: ["rkpw", "json"] }],
     properties: ["openFile"]
   });
   if (canceled || !filePaths[0]) return null;
