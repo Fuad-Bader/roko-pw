@@ -133,8 +133,11 @@ interface VaultContextValue {
    * so the same master password unlocks it), and switches to remote sync.
    */
   uploadVaultToServer: (name: string) => Promise<VaultMeta>
-  /** Invite a user to the current vault by email (sends them the vault password). */
-  inviteUser: (email: string, vaultPassword: string) => Promise<void>
+  /**
+   * Invite a user to the current vault by email. The server emails only an
+   * accept link; the inviter shares the vault password out-of-band.
+   */
+  inviteUser: (email: string) => Promise<void>
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null)
@@ -785,7 +788,7 @@ export function VaultProvider({
     return vault
   }, [cryptoKey, vaultSalt, entries, collections, settings, persist])
 
-  const inviteUser = useCallback(async (email: string, vaultPassword: string) => {
+  const inviteUser = useCallback(async (email: string) => {
     const s = readSettings()
     const session = readSession()
     if (!session) throw new Error('Not connected to a server')
@@ -793,7 +796,6 @@ export function VaultProvider({
       { serverUrl: session.serverUrl, token: session.token },
       s.vaultId,
       email,
-      vaultPassword,
     )
   }, [])
 

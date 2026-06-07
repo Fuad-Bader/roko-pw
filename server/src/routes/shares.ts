@@ -23,14 +23,11 @@ shareRoutes.post('/vaults/:id/invite', requireAuth, async (c) => {
   if (!membership) return c.json({ error: 'Not found' }, 404)
 
   const body = await c
-    .req.json<{ email?: string; vaultPassword?: string; role?: string }>()
-    .catch(() => ({ email: undefined, vaultPassword: undefined, role: undefined }))
+    .req.json<{ email?: string; role?: string }>()
+    .catch(() => ({ email: undefined, role: undefined }))
 
   const invitedEmail = (body.email ?? '').trim().toLowerCase()
   if (!invitedEmail || !invitedEmail.includes('@')) return c.json({ error: 'Invalid email' }, 400)
-
-  const vaultPassword = (body.vaultPassword ?? '').trim()
-  if (!vaultPassword) return c.json({ error: 'vaultPassword required' }, 400)
 
   const role = body.role === 'owner' ? 'member' : (body.role ?? 'member') // prevent owner escalation
 
@@ -57,7 +54,7 @@ shareRoutes.post('/vaults/:id/invite', requireAuth, async (c) => {
   ).run(id, vaultId, inviter.id, invitedEmail, role, token, now, now + INVITE_TTL_MS)
 
   try {
-    await sendInviteEmail(invitedEmail, inviter.email, vault.name, token, vaultPassword)
+    await sendInviteEmail(invitedEmail, inviter.email, vault.name, token)
   } catch (err) {
     console.error('Failed to send invite email:', err)
     db.prepare('DELETE FROM vault_invites WHERE id = ?').run(id)

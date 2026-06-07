@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { InstallButton } from './components/InstallButton'
 import { DownloadDesktop } from './components/DownloadDesktop'
 import { DownloadExtension } from './components/DownloadExtension'
 import { useTheme, ACCENTS } from './components/ThemeProvider'
+import { useMediaQuery } from './components/useMediaQuery'
 import {
   ShieldTick,
   Fingerprint01,
@@ -156,8 +158,16 @@ const STEPS = [
   },
 ]
 
+const NAV_LINKS = [
+  { label: 'Features', href: '#features' },
+  { label: 'Security', href: '#security' },
+  { label: 'Download', href: '#download' },
+]
+
 export default function LandingPage() {
   const { theme, toggleTheme, accent, setAccent } = useTheme()
+  const mobile = useMediaQuery('(max-width: 760px)')
+  const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <div
@@ -183,7 +193,7 @@ export default function LandingPage() {
           style={{
             maxWidth: 1280,
             margin: '0 auto',
-            padding: '0 32px',
+            padding: mobile ? '0 16px' : '0 32px',
             height: 64,
             display: 'flex',
             alignItems: 'center',
@@ -193,56 +203,56 @@ export default function LandingPage() {
         >
           <Logo size={28} />
 
-          <nav style={{ display: 'flex', gap: 32, flex: 1, justifyContent: 'center' }}>
-            {[
-              { label: 'Features', href: '#features' },
-              { label: 'Security', href: '#security' },
-              { label: 'Download', href: '#download' },
-            ].map((l) => (
-              <a
-                key={l.label}
-                href={l.href}
-                style={{
-                  color: 'var(--color-text-secondary)',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  textDecoration: 'none',
-                  transition: 'color 0.12s',
-                }}
-                onMouseEnter={(e) =>
-                  ((e.target as HTMLElement).style.color = 'var(--color-text-primary)')
-                }
-                onMouseLeave={(e) =>
-                  ((e.target as HTMLElement).style.color = 'var(--color-text-secondary)')
-                }
-              >
-                {l.label}
-              </a>
-            ))}
-          </nav>
+          {!mobile && (
+            <nav style={{ display: 'flex', gap: 32, flex: 1, justifyContent: 'center' }}>
+              {NAV_LINKS.map((l) => (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  style={{
+                    color: 'var(--color-text-secondary)',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                    transition: 'color 0.12s',
+                  }}
+                  onMouseEnter={(e) =>
+                    ((e.target as HTMLElement).style.color = 'var(--color-text-primary)')
+                  }
+                  onMouseLeave={(e) =>
+                    ((e.target as HTMLElement).style.color = 'var(--color-text-secondary)')
+                  }
+                >
+                  {l.label}
+                </a>
+              ))}
+            </nav>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* Accent picker */}
-            <div style={{ display: 'flex', gap: 4, marginRight: 8 }}>
-              {ACCENTS.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => setAccent(a.id)}
-                  title={a.label}
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    background: a.color,
-                    border: accent === a.id ? `2px solid var(--color-text-primary)` : '2px solid transparent',
-                    cursor: 'pointer',
-                    padding: 0,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              ))}
-            </div>
+            {!mobile && (
+              <div style={{ display: 'flex', gap: 4, marginRight: 8 }}>
+                {ACCENTS.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAccent(a.id)}
+                    title={a.label}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: a.color,
+                      border: accent === a.id ? `2px solid var(--color-text-primary)` : '2px solid transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Theme toggle */}
             <button
@@ -265,57 +275,155 @@ export default function LandingPage() {
               {theme === 'dark' ? <Sun size={16} /> : <Moon01 size={16} />}
             </button>
 
-            <Link
-              href="/vault"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                height: 36,
-                padding: '0 14px',
-                borderRadius: 8,
-                border: '1px solid var(--color-border-primary)',
-                background: 'var(--color-bg-primary)',
-                color: 'var(--color-text-secondary)',
-                fontSize: 14,
-                fontWeight: 600,
-                textDecoration: 'none',
-                boxShadow: '0 1px 2px 0 rgba(16,24,40,.05)',
-                transition: 'background 0.12s',
-              }}
-            >
-              Sign in
-            </Link>
+            {!mobile && (
+              <Link
+                href="/vault"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 36,
+                  padding: '0 14px',
+                  borderRadius: 8,
+                  border: '1px solid var(--color-border-primary)',
+                  background: 'var(--color-bg-primary)',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  boxShadow: '0 1px 2px 0 rgba(16,24,40,.05)',
+                  transition: 'background 0.12s',
+                }}
+              >
+                Sign in
+              </Link>
+            )}
 
+            {!mobile && (
+              <Link
+                href="/vault"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 36,
+                  padding: '0 14px',
+                  borderRadius: 8,
+                  background: 'var(--color-bg-brand-solid)',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  boxShadow:
+                    '0 1px 2px 0 rgba(16,24,40,.05), inset 0 -2px 0 rgba(16,24,40,.05), inset 0 0 0 1px rgba(16,24,40,.18)',
+                  transition: 'background 0.12s',
+                }}
+              >
+                Get started free <ArrowRight size={14} />
+              </Link>
+            )}
+
+            {/* Mobile hamburger */}
+            {mobile && (
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={menuOpen ? 'true' : 'false'}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  border: '1px solid var(--color-border-primary)',
+                  background: 'var(--color-bg-secondary)',
+                  color: 'var(--color-text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 18,
+                  cursor: 'pointer',
+                }}
+              >
+                {menuOpen ? '✕' : '☰'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile dropdown menu */}
+        {mobile && menuOpen && (
+          <nav
+            style={{
+              borderTop: '1px solid var(--color-border-secondary)',
+              background: 'var(--color-bg-primary)',
+              padding: '8px 20px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            {NAV_LINKS.map((l) => (
+              <a
+                key={l.label}
+                href={l.href}
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 15,
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                  padding: '10px 4px',
+                }}
+              >
+                {l.label}
+              </a>
+            ))}
             <Link
               href="/vault"
+              onClick={() => setMenuOpen(false)}
               style={{
+                marginTop: 8,
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 6,
-                height: 36,
-                padding: '0 14px',
+                height: 44,
                 borderRadius: 8,
                 background: 'var(--color-bg-brand-solid)',
                 color: '#fff',
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: 600,
                 textDecoration: 'none',
-                boxShadow:
-                  '0 1px 2px 0 rgba(16,24,40,.05), inset 0 -2px 0 rgba(16,24,40,.05), inset 0 0 0 1px rgba(16,24,40,.18)',
-                transition: 'background 0.12s',
               }}
             >
               Get started free <ArrowRight size={14} />
             </Link>
-          </div>
-        </div>
+            <Link
+              href="/vault"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 44,
+                borderRadius: 8,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-primary)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 15,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              Sign in
+            </Link>
+          </nav>
+        )}
       </header>
 
       {/* ── Hero ── */}
       <section
         style={{
-          padding: '96px 32px 80px',
+          padding: mobile ? '56px 20px 48px' : '96px 32px 80px',
           textAlign: 'center',
           maxWidth: 1280,
           margin: '0 auto',
@@ -424,7 +532,7 @@ export default function LandingPage() {
               background: 'var(--color-bg-primary)',
               borderRadius: 12,
               display: 'grid',
-              gridTemplateColumns: '220px 1fr',
+              gridTemplateColumns: mobile ? '1fr' : '220px 1fr',
               overflow: 'hidden',
               border: '1px solid var(--color-border-secondary)',
             }}
@@ -499,7 +607,7 @@ export default function LandingPage() {
                   + New
                 </span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                 {[
                   { name: 'GitHub', user: 'alice@hey.com', c: '#0d1117', letters: 'GH' },
                   { name: 'Stripe', user: 'team@aurora.co', c: '#635BFF', letters: 'S' },
@@ -562,7 +670,7 @@ export default function LandingPage() {
       <section
         id="features"
         style={{
-          padding: '96px 32px',
+          padding: mobile ? '64px 20px' : '96px 32px',
           background: 'var(--color-bg-secondary)',
           scrollMarginTop: 64,
         }}
@@ -599,7 +707,7 @@ export default function LandingPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
               gap: 40,
             }}
           >
@@ -634,13 +742,13 @@ export default function LandingPage() {
       </section>
 
       {/* ── Security ── */}
-      <section id="security" style={{ padding: '96px 32px', scrollMarginTop: 64 }}>
+      <section id="security" style={{ padding: mobile ? '64px 20px' : '96px 32px', scrollMarginTop: 64 }}>
         <div
           style={{
             maxWidth: 1280,
             margin: '0 auto',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))',
             gap: 64,
             alignItems: 'center',
           }}
@@ -773,7 +881,7 @@ export default function LandingPage() {
       {/* ── How it works ── */}
       <section
         style={{
-          padding: '96px 32px',
+          padding: mobile ? '64px 20px' : '96px 32px',
           background: `linear-gradient(135deg, var(--color-brand-700), var(--color-brand-900))`,
         }}
       >
@@ -797,7 +905,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 24 }}>
             {STEPS.map((s) => (
               <div
                 key={s.n}
@@ -830,7 +938,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Download desktop app ── */}
-      <section id="download" style={{ padding: '96px 32px', scrollMarginTop: 64 }}>
+      <section id="download" style={{ padding: mobile ? '64px 20px' : '96px 32px', scrollMarginTop: 64 }}>
         <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
           <Badge>Desktop app</Badge>
           <h2
@@ -899,7 +1007,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section id="get-started" style={{ padding: '96px 32px', scrollMarginTop: 64 }}>
+      <section id="get-started" style={{ padding: mobile ? '64px 20px' : '96px 32px', scrollMarginTop: 64 }}>
         <div
           style={{
             maxWidth: 1280,
@@ -974,7 +1082,7 @@ export default function LandingPage() {
             maxWidth: 1280,
             margin: '0 auto',
             display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr',
+            gridTemplateColumns: mobile ? '1fr' : '1.5fr 1fr',
             gap: 32,
             marginBottom: 48,
           }}

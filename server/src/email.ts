@@ -39,7 +39,6 @@ export async function sendInviteEmail(
   inviterEmail: string,
   vaultName: string,
   inviteToken: string,
-  vaultPassword: string,
 ): Promise<void> {
   const acceptUrl = `${PUBLIC_URL}/invite/${inviteToken}`
   await transport().sendMail({
@@ -50,12 +49,12 @@ export async function sendInviteEmail(
       `${inviterEmail} has invited you to access the vault "${vaultName}".`,
       '',
       `Server:        ${PUBLIC_URL}`,
-      `Vault password: ${vaultPassword}`,
       '',
       `Accept the invitation: ${acceptUrl}`,
       '',
-      'You will need the vault password above to decrypt and access this vault.',
-      'Keep it somewhere safe — the server never stores it.',
+      `You will also need the vault password to decrypt this vault. For security it`,
+      `is NOT included in this email — ${inviterEmail} will share it with you`,
+      `separately. The server never sees or stores it.`,
     ].join('\n'),
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
@@ -66,17 +65,14 @@ export async function sendInviteEmail(
             <td style="padding:.5rem;color:#6b7280;font-size:.875rem">Server</td>
             <td style="padding:.5rem;font-family:monospace">${PUBLIC_URL}</td>
           </tr>
-          <tr style="background:#fafafa">
-            <td style="padding:.5rem;color:#6b7280;font-size:.875rem">Vault password</td>
-            <td style="padding:.5rem;font-family:monospace;font-size:1.1rem;font-weight:700;color:#1e1b4b">${vaultPassword}</td>
-          </tr>
         </table>
         <a href="${acceptUrl}" style="display:inline-block;background:#4f46e5;color:white;padding:.75rem 1.5rem;border-radius:.5rem;text-decoration:none;font-weight:600">
           Accept Invitation
         </a>
         <p style="color:#6b7280;font-size:.75rem;margin-top:1.5rem">
-          You will need the vault password above when you open LilaCrypt and connect to this vault.
-          The server never stores it — keep it safe.
+          You'll also need the <strong>vault password</strong> to decrypt this vault. For security it is
+          <strong>not</strong> included in this email — <strong>${inviterEmail}</strong> will share it with you
+          separately. The server never sees or stores it.
         </p>
       </div>`,
   })

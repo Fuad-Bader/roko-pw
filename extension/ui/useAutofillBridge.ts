@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useVault } from '@components/VaultProvider'
 import { exportKey } from '@/lib/crypto'
 
@@ -25,16 +25,26 @@ export async function loadSessionKey(): Promise<string | null> {
 
 export function useAutofillBridge(): void {
   const { cryptoKey } = useVault()
+  // Tracks whether we've actually held a key this mount, so we only clear the
+  // cached key on a real lock — NOT on the initial null state before restore
+  // runs (which would wipe the key we're about to rehydrate from).
+  const hadKey = useRef(false)
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         if (cryptoKey) {
+          hadKey.current = true
           const raw = await exportKey(cryptoKey)
           if (!cancelled) await chrome.storage.session.set({ rokoKey: raw })
-        } else {
+        } else if (hadKey.current) {
+          // The vault was unlocked and is now locked → forget the cached key.
+          hadKey.current = false
           await chrome.storage.session.remove('rokoKey')
         }
+        // else: initial mount, no key yet — leave any cached key in place so the
+        // provider's restoreKey can rehydrate the unlocked session.
       } catch {
         /* storage.session unavailable — autofill simply stays locked */
       }

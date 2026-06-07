@@ -51,7 +51,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        vault: resolve(here, 'ui/vault.html'),
+        // Single surface: the popup hosts the full vault + autofill. The same
+        // page can also be opened in a tab (the dock's "⤢ Tab" button).
         popup: resolve(here, 'ui/popup.html'),
       },
     },

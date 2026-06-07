@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useVault, VaultProvider } from '@components/VaultProvider'
 import { ThemeProvider } from '@components/ThemeProvider'
+import { UnlockScreen } from '@components/UnlockScreen'
+import { VaultDashboard } from '@components/VaultDashboard'
 import type { VaultEntry } from '@/lib/types'
 import { useAutofillBridge, loadSessionKey } from './useAutofillBridge'
 
-// ─── helpers ───────────────────────────────────────────────────────────────
+// One surface: the popup hosts the full vault dashboard AND the autofill for the
+// active tab. Unlocked → <VaultDashboard> (same component as the web app) with a
+// floating autofill dock; otherwise → <UnlockScreen> (create / unlock / connect /
+// recover). The same popup.html can also be opened in a tab (the dock's ⤢ Tab
+// button) for flows where a native file dialog would otherwise close the popup.
 
 function hostnameOf(url: string): string {
   try {
@@ -14,113 +20,28 @@ function hostnameOf(url: string): string {
   }
 }
 
-function openFullVault() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('vault.html') })
-  window.close()
-}
+// ─── Floating autofill + pop-out dock (popup mode only) ──────────────────────
 
-interface PasskeyMeta {
-  credentialId: string
-  rpId: string
-  userName?: string
-  userDisplayName?: string
-}
-
-// ─── screens ───────────────────────────────────────────────────────────────
-
-function Locked() {
-  const { unlock, error } = useVault()
-  const [pw, setPw] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async () => {
-    if (!pw || busy) return
-    setBusy(true)
-    await unlock(pw)
-    setBusy(false)
-    setPw('')
-  }
-
-  return (
-    <div style={S.pad}>
-      <h1 style={S.brand}>
-        <span style={{ color: 'var(--color-text-brand-primary, #7F56D9)' }}>Lila</span>Crypt
-      </h1>
-      <p style={S.muted}>Unlock your vault to autofill and manage credentials.</p>
-      <input
-        type="password"
-        value={pw}
-        autoFocus
-        placeholder="Master password"
-        onChange={(e) => setPw(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && submit()}
-        style={S.input}
-      />
-      {error && <p style={S.error}>{error}</p>}
-      <button style={S.primary} disabled={busy} onClick={submit}>
-        {busy ? 'Unlocking…' : 'Unlock'}
-      </button>
-      <button style={S.link} onClick={openFullVault}>
-        Open full vault ↗
-      </button>
-    </div>
-  )
-}
-
-function Empty() {
-  return (
-    <div style={S.pad}>
-      <h1 style={S.brand}>
-        <span style={{ color: 'var(--color-text-brand-primary, #7F56D9)' }}>Lila</span>Crypt
-      </h1>
-      <p style={S.muted}>No vault on this browser yet. Create or connect one in the full vault.</p>
-      <button style={S.primary} onClick={openFullVault}>
-        Open full vault ↗
-      </button>
-    </div>
-  )
-}
-
-function Unlocked() {
-  const { entries, lock } = useVault()
-  const [tabUrl, setTabUrl] = useState('')
-  const [passkeys, setPasskeys] = useState<PasskeyMeta[]>([])
-  const [confirmId, setConfirmId] = useState('')
-  const [toast, setToast] = useState('')
-
-  const loadPasskeys = () =>
-    chrome.runtime
-      .sendMessage({ type: 'GET_PASSKEYS' })
-      .then((r) => setPasskeys(r?.passkeys ?? []))
-      .catch(() => setPasskeys([]))
+function AutofillDock({ isTab }: { isTab: boolean }) {
+  const { entries, status } = useVault()
+  const [host, setHost] = useState('')
 
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-      setTabUrl(tabs[0]?.url ?? '')
-    })
-    loadPasskeys()
-  }, [])
+    if (isTab) return
+    chrome.tabs
+      .query({ active: true, currentWindow: true })
+      .then((t) => setHost(hostnameOf(t[0]?.url ?? '')))
+      .catch(() => {})
+  }, [isTab])
 
-  const removePasskey = async (credentialId: string) => {
-    if (confirmId !== credentialId) {
-      setConfirmId(credentialId)
-      setTimeout(() => setConfirmId((c) => (c === credentialId ? '' : c)), 2500)
-      return
-    }
-    setConfirmId('')
-    await chrome.runtime.sendMessage({ type: 'DELETE_PASSKEY', credentialId }).catch(() => {})
-    await loadPasskeys()
-  }
+  if (isTab) return null // running in a full tab — nothing to autofill
 
-  const host = hostnameOf(tabUrl)
-  const logins = entries.filter((e) => !e.deletedAt && (e.type ?? 'login') === 'login')
-  const matches = host ? logins.filter((e) => hostnameOf(e.url) === host) : []
-  const list = matches.length > 0 ? matches : logins
-
-  const showToast = (t: string) => {
-    setToast(t)
-    setTimeout(() => setToast(''), 1400)
-  }
+  const matches =
+    status === 'unlocked' && host
+      ? entries.filter(
+          (e) => !e.deletedAt && (e.type ?? 'login') === 'login' && hostnameOf(e.url) === host,
+        )
+      : []
 
   const fill = async (entry: VaultEntry) => {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -130,77 +51,36 @@ function Unlocked() {
     }
   }
 
-  const copy = async (text: string, label: string) => {
-    await navigator.clipboard.writeText(text)
-    showToast(`Copied ${label}`)
+  const popOut = () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') })
+    window.close()
   }
 
   return (
-    <div>
-      <div style={S.header}>
-        <span style={S.brandSm}>
-          <span style={{ color: 'var(--color-text-brand-primary, #7F56D9)' }}>Lila</span>Crypt
-        </span>
-        <button style={S.lockBtn} onClick={lock} title="Lock vault">
-          🔒 Lock
-        </button>
-      </div>
-
-      <div style={S.pad}>
-        <p style={S.heading}>
-          {matches.length > 0 ? `Matches for ${host}` : 'All logins'}
-        </p>
-
-        {list.length === 0 && <p style={S.muted}>No logins yet.</p>}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {list.slice(0, 12).map((e) => (
-            <div key={e.id} style={S.card}>
-              <div style={S.cardTitle}>{e.title || e.url || 'Untitled'}</div>
-              <div style={S.cardUser}>{e.username}</div>
-              <div style={S.cardActions}>
-                <button style={S.fill} onClick={() => fill(e)}>
-                  Fill ↗
-                </button>
-                <button style={S.ghost} onClick={() => copy(e.username, 'user')}>
-                  User
-                </button>
-                <button style={S.ghost} onClick={() => copy(e.password, 'password')}>
-                  Pwd
-                </button>
-              </div>
-            </div>
+    <div style={dock.bar}>
+      {matches.length > 0 && (
+        <>
+          <span style={dock.label}>Fill {host}</span>
+          {matches.slice(0, 2).map((e) => (
+            <button key={e.id} style={dock.fill} onClick={() => fill(e)} title={e.username}>
+              ↗ {e.title || e.username}
+            </button>
           ))}
-        </div>
-
-        {passkeys.length > 0 && (
-          <>
-            <p style={{ ...S.heading, marginTop: 16 }}>Passkeys</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {passkeys.map((pk) => (
-                <div key={pk.credentialId} style={S.card}>
-                  <div style={S.cardTitle}>🔐 {pk.rpId}</div>
-                  <div style={S.cardUser}>{pk.userDisplayName || pk.userName || ''}</div>
-                  <div style={S.cardActions}>
-                    <button style={S.ghost} onClick={() => removePasskey(pk.credentialId)}>
-                      {confirmId === pk.credentialId ? '✓ Confirm remove' : '🗑 Remove'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        <button style={{ ...S.primary, marginTop: 16 }} onClick={openFullVault}>
-          Open full vault ↗
-        </button>
-      </div>
-
-      {toast && <div style={S.toastBox}>{toast}</div>}
+          <span style={dock.divider} />
+        </>
+      )}
+      <button
+        style={dock.tab}
+        onClick={popOut}
+        title="Open in a full tab (needed for file import / export)"
+      >
+        ⤢ Tab
+      </button>
     </div>
   )
 }
+
+// ─── Router ──────────────────────────────────────────────────────────────────
 
 function Router() {
   const { status } = useVault()
@@ -208,91 +88,128 @@ function Router() {
 
   if (status === 'checking') {
     return (
-      <div style={{ ...S.pad, textAlign: 'center', color: 'var(--color-text-tertiary, #888)' }}>
-        Loading…
+      <div style={center}>
+        <div style={spinner} />
       </div>
     )
   }
-  if (status === 'empty') return <Empty />
-  if (status === 'unlocked') return <Unlocked />
-  return <Locked />
+  if (status === 'unlocked') return <VaultDashboard />
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      <UnlockScreen />
+    </div>
+  )
 }
 
 export function PopupApp() {
+  const [isTab, setIsTab] = useState(false)
+
+  useEffect(() => {
+    // chrome.tabs.getCurrent() resolves to a Tab when this page runs in a tab,
+    // and undefined inside the toolbar popup.
+    chrome.tabs
+      .getCurrent()
+      .then((t) => setIsTab(!!t))
+      .catch(() => {})
+  }, [])
+
   return (
     <ThemeProvider>
       <VaultProvider restoreKey={loadSessionKey}>
-        <div style={S.shell}>
+        <div style={isTab ? shell.tab : shell.popup}>
           <Router />
+          <AutofillDock isTab={isTab} />
         </div>
       </VaultProvider>
     </ThemeProvider>
   )
 }
 
-// ─── inline styles (popup is tiny, kept self-contained) ──────────────────────
+// ─── styles ──────────────────────────────────────────────────────────────────
 
-const S: Record<string, React.CSSProperties> = {
-  shell: {
-    width: 360,
-    minHeight: 200,
+// A fixed portrait 440×600 root makes the dashboard's `height: 100vh` resolve to
+// 600 and fit the popup; 440px is under the dashboard's 700px breakpoint so it
+// auto-stacks into a single navigable column. In a tab we fill the viewport.
+const shell: Record<string, React.CSSProperties> = {
+  popup: {
+    width: 440,
+    height: 600,
+    overflow: 'hidden',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
     background: 'var(--color-bg-primary, #fff)',
     color: 'var(--color-text-primary, #18181b)',
     fontFamily: 'var(--font-body, system-ui, sans-serif)',
   },
-  pad: { padding: 16 },
-  brand: { fontSize: 22, fontWeight: 700, margin: '4px 0 8px' },
-  brandSm: { fontSize: 15, fontWeight: 700 },
-  muted: { fontSize: 13, color: 'var(--color-text-tertiary, #71717a)', margin: '0 0 12px' },
-  heading: {
-    fontSize: 11,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '.04em',
-    color: 'var(--color-text-tertiary, #71717a)',
-    margin: '0 0 8px',
-  },
-  input: {
+  tab: {
     width: '100%',
-    boxSizing: 'border-box',
-    height: 40,
-    padding: '0 12px',
-    borderRadius: 8,
-    border: '1px solid var(--color-border-primary, #d4d4d8)',
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
     background: 'var(--color-bg-primary, #fff)',
-    color: 'inherit',
-    fontSize: 14,
-    marginBottom: 8,
+    color: 'var(--color-text-primary, #18181b)',
+    fontFamily: 'var(--font-body, system-ui, sans-serif)',
   },
-  primary: {
-    width: '100%',
-    height: 40,
-    borderRadius: 8,
-    border: 'none',
-    background: 'var(--color-bg-brand-solid, #7F56D9)',
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  link: {
-    width: '100%',
-    marginTop: 8,
-    background: 'none',
-    border: 'none',
-    color: 'var(--color-text-brand-primary, #7F56D9)',
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
-  },
-  header: {
+}
+
+const center: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+
+const spinner: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  border: '2px solid var(--color-border-primary, #d4d4d8)',
+  borderTopColor: 'var(--color-bg-brand-solid, #7F56D9)',
+  animation: 'spin 0.7s linear infinite',
+}
+
+const dock: Record<string, React.CSSProperties> = {
+  bar: {
+    position: 'fixed',
+    bottom: 10,
+    right: 10,
+    zIndex: 50,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 16px',
-    borderBottom: '1px solid var(--color-border-secondary, #e4e4e7)',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+    maxWidth: 'calc(100% - 20px)',
+    padding: '6px 8px',
+    borderRadius: 10,
+    background: 'var(--color-bg-primary, #fff)',
+    border: '1px solid var(--color-border-secondary, #e4e4e7)',
+    boxShadow: '0 6px 20px rgba(16,24,40,.18)',
+    fontSize: 12,
   },
-  lockBtn: {
+  label: { color: 'var(--color-text-tertiary, #71717a)', fontWeight: 600, whiteSpace: 'nowrap' },
+  fill: {
+    maxWidth: 140,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    background: 'var(--color-bg-brand-solid, #7F56D9)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    padding: '4px 8px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  divider: {
+    width: 1,
+    alignSelf: 'stretch',
+    background: 'var(--color-border-secondary, #e4e4e7)',
+    margin: '0 2px',
+  },
+  tab: {
     background: 'none',
     border: '1px solid var(--color-border-primary, #d4d4d8)',
     borderRadius: 6,
@@ -300,44 +217,6 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 12,
     cursor: 'pointer',
     color: 'inherit',
-  },
-  card: {
-    border: '1px solid var(--color-border-secondary, #e4e4e7)',
-    borderRadius: 8,
-    padding: 10,
-  },
-  cardTitle: { fontSize: 13, fontWeight: 600 },
-  cardUser: { fontSize: 12, color: 'var(--color-text-tertiary, #71717a)', marginBottom: 6 },
-  cardActions: { display: 'flex', gap: 6 },
-  fill: {
-    background: 'var(--color-bg-brand-solid, #7F56D9)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    padding: '4px 10px',
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  ghost: {
-    background: 'none',
-    border: '1px solid var(--color-border-primary, #d4d4d8)',
-    borderRadius: 6,
-    padding: '4px 10px',
-    fontSize: 12,
-    cursor: 'pointer',
-    color: 'inherit',
-  },
-  error: { fontSize: 12, color: '#dc2626', margin: '0 0 8px' },
-  toastBox: {
-    position: 'fixed',
-    bottom: 12,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: '#16a34a',
-    color: '#fff',
-    padding: '6px 14px',
-    borderRadius: 8,
-    fontSize: 12,
+    whiteSpace: 'nowrap',
   },
 }

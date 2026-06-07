@@ -2,18 +2,22 @@
 
 The extension reuses the web app's React vault UI (the same
 `VaultProvider` / `VaultDashboard` / `UnlockScreen` components), bundled with
-Vite. It ships two pages:
+Vite into a **single page** (`popup.html`):
 
-- **`popup.html`** — the toolbar popup: quick unlock + autofill matches for the
-  current tab + passkeys + an "Open full vault" button.
-- **`vault.html`** — the full dashboard (opened in a tab): every feature the web
-  app has — login/card/note items, collections, favorites, trash, password
-  generator, recovery phrase, change master password, file import/export, and
-  server sync (login/OTP, remote vaults, upload, invites).
+- The **toolbar popup** is the whole app — the full vault dashboard (login/card/
+  note items, collections, favorites, trash, password generator, recovery
+  phrase, change master password, file import/export, and server sync:
+  login/OTP, remote vaults, upload, invites) **plus** a floating autofill dock
+  that fills the active tab's login form.
+- The dock's **⤢ Tab** button opens the same `popup.html` in a browser tab — use
+  it for flows where a native file dialog would otherwise close the popup
+  (vault file import/export).
 
 The autofill background worker stays vanilla; it reads the encrypted vault from
 `chrome.storage.local` (`rokoVault`) and the unlocked key from
-`chrome.storage.session` (`rokoKey`), which the UI hands off after unlock.
+`chrome.storage.session` (`rokoKey`), which the UI hands off after unlock. The
+popup and any popped-out tab share that session key, so unlocking once unlocks
+both (see `restoreKey` in `VaultProvider`).
 
 ## Build
 

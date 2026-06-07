@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useVault } from './VaultProvider'
 import { useTheme, ACCENTS } from './ThemeProvider'
+import { useMediaQuery } from './useMediaQuery'
 import { RecoverVault } from './RecoverVault'
 import { ServerLogin } from './ServerLogin'
 import type { VaultMeta } from '@/lib/types'
@@ -79,6 +80,9 @@ export function UnlockScreen() {
     logoutServer,
   } = useVault()
   const { theme, toggleTheme, accent, setAccent } = useTheme()
+  // Below this width (extension popup / phones) drop the marketing sidebar and
+  // show just the form full-width so nothing overflows horizontally.
+  const narrow = useMediaQuery('(max-width: 700px)')
   const [mode, setMode] = useState<Mode>(status === 'empty' ? 'create' : 'unlock')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -196,17 +200,17 @@ export function UnlockScreen() {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '420px 1fr',
+        gridTemplateColumns: narrow ? '1fr' : '420px 1fr',
         minHeight: '100vh',
         background: 'var(--color-bg-primary)',
       }}
     >
-      {/* ── Left: Dark sidebar ── */}
+      {/* ── Left: Dark sidebar (hidden on narrow screens) ── */}
       <aside
         style={{
           background: 'var(--color-bg-primary-solid)',
           padding: '40px 48px',
-          display: 'flex',
+          display: narrow ? 'none' : 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           minHeight: '100vh',
@@ -292,7 +296,9 @@ export function UnlockScreen() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 48,
+          // Extra top padding on narrow clears the absolute theme controls; tighter
+          // sides keep the 380px form from overflowing a ~440px popup.
+          padding: narrow ? '64px 20px 32px' : 48,
           position: 'relative',
         }}
       >

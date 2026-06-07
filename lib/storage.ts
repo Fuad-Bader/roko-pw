@@ -163,17 +163,19 @@ export async function verifyServerOtp(
   return { token: body.token!, expiresAt: body.expiresAt! }
 }
 
-/** Invite another user to a vault. The vault password is sent in the email. */
+/**
+ * Invite another user to a vault. The server emails them only an accept link —
+ * the vault password is shared out-of-band by the inviter, never via the server.
+ */
 export async function inviteToVault(
   remote: RemoteConfig,
   vaultId: string,
   email: string,
-  vaultPassword: string,
 ): Promise<void> {
   const res = await fetch(`${remote.serverUrl}/api/vaults/${vaultId}/invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remote.token}` },
-    body: JSON.stringify({ email, vaultPassword }),
+    body: JSON.stringify({ email }),
   })
   const body = await res.json() as { error?: string }
   if (!res.ok) throw new Error(body.error ?? 'Failed to send invite')

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { VaultEntry, EntryType, EntryDraft, Collection } from '@/lib/types'
 import { useVault } from './VaultProvider'
 import { useTheme, ACCENTS } from './ThemeProvider'
+import { useMediaQuery } from './useMediaQuery'
 import { CredentialForm } from './CredentialForm'
 import { PasswordGenerator } from './PasswordGenerator'
 import { RecoveryPhraseDisplay } from './RecoveryPhraseDisplay'
@@ -168,6 +169,10 @@ export function VaultDashboard() {
     clearError,
   } = useVault()
   const { theme, toggleTheme, accent, setAccent } = useTheme()
+  // Below this width (extension popup / phones) the 3-column grid collapses into
+  // a single navigable column: list ↔ detail, with a toggled sidebar.
+  const narrow = useMediaQuery('(max-width: 700px)')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [panel, setPanel] = useState<Panel>('none')
   const [view, setView] = useState<View>({ kind: 'category', category: 'all' })
@@ -278,6 +283,7 @@ export function VaultDashboard() {
     setView(v)
     setSelected(null)
     setPanel('none')
+    setSidebarOpen(false) // narrow mode: drop back to the list after picking a view
   }
 
   const submitNewCollection = async () => {
@@ -306,11 +312,26 @@ export function VaultDashboard() {
     }
   }
 
+  // Reset the sidebar overlay when we leave narrow mode (e.g. window widened).
+  useEffect(() => {
+    if (!narrow) setSidebarOpen(false)
+  }, [narrow])
+
+  // In narrow mode exactly one region shows at a time. The right panel is
+  // "active" whenever a form is open or an entry is selected for detail.
+  const rightActive = panel !== 'none' || !!selected
+  const showSidebar = !narrow || (sidebarOpen && !rightActive)
+  const showList = !narrow || (!sidebarOpen && !rightActive)
+  const showMain = !narrow || rightActive
+
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '240px 320px 1fr',
+        gridTemplateColumns: narrow ? '1fr' : '240px 320px 1fr',
+        // In narrow mode only one region renders, so a single 100vh row makes it
+        // fill the popup/viewport height.
+        ...(narrow ? { gridTemplateRows: '100vh' } : {}),
         height: '100vh',
         overflow: 'hidden',
         background: 'var(--color-bg-primary)',
@@ -322,14 +343,42 @@ export function VaultDashboard() {
         style={{
           background: 'var(--color-bg-secondary)',
           borderRight: '1px solid var(--color-border-secondary)',
-          display: 'flex',
+          display: showSidebar ? 'flex' : 'none',
           flexDirection: 'column',
           overflow: 'hidden',
         }}
       >
         {/* Logo */}
-        <div style={{ padding: '16px 12px 12px', borderBottom: '1px solid var(--color-border-secondary)' }}>
+        <div
+          style={{
+            padding: '16px 12px 12px',
+            borderBottom: '1px solid var(--color-border-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           <Logo size={22} />
+          {narrow && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close menu"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-primary)',
+                color: 'var(--color-text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Search */}
@@ -667,7 +716,7 @@ export function VaultDashboard() {
       <section
         style={{
           borderRight: '1px solid var(--color-border-secondary)',
-          display: 'flex',
+          display: showList ? 'flex' : 'none',
           flexDirection: 'column',
           overflow: 'hidden',
         }}
@@ -681,10 +730,34 @@ export function VaultDashboard() {
             justifyContent: 'space-between',
           }}
         >
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{viewTitle}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
-              {filtered.length} item{filtered.length !== 1 ? 's' : ''}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {narrow && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Open menu"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 6,
+                  border: '1px solid var(--color-border-primary)',
+                  background: 'var(--color-bg-primary)',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 16,
+                  cursor: 'pointer',
+                }}
+              >
+                ☰
+              </button>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{viewTitle}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
+                {filtered.length} item{filtered.length !== 1 ? 's' : ''}
+              </div>
             </div>
           </div>
           {view.kind === 'category' && view.category === 'trash' ? null : (
@@ -855,7 +928,7 @@ export function VaultDashboard() {
       </section>
 
       {/* ── Right Panel ── */}
-      <main style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--color-bg-primary)' }}>
+      <main style={{ display: showMain ? 'flex' : 'none', flexDirection: 'column', overflow: 'hidden', background: 'var(--color-bg-primary)' }}>
         {panel === 'add' && (
           <RightPanel title="Add item" onClose={closePanel}>
             <CredentialForm defaultType={addTypeFor(view)} onSave={handleAdd} onCancel={closePanel} />
@@ -889,16 +962,40 @@ export function VaultDashboard() {
         )}
 
         {panel === 'none' && selected && (
-          <CredentialDetail
-            entry={selected}
-            collections={collections}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-            onRestore={handleRestore}
-            onToggleFavorite={toggleFavorite}
-            onMoveToCollection={moveEntryToCollection}
-            deleteConfirm={deleteConfirm}
-          />
+          <>
+            {narrow && (
+              <button
+                onClick={() => setSelected(null)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  alignSelf: 'flex-start',
+                  margin: '12px 0 0 14px',
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: '1px solid var(--color-border-primary)',
+                  background: 'var(--color-bg-primary)',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                ← Back
+              </button>
+            )}
+            <CredentialDetail
+              entry={selected}
+              collections={collections}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              onRestore={handleRestore}
+              onToggleFavorite={toggleFavorite}
+              onMoveToCollection={moveEntryToCollection}
+              deleteConfirm={deleteConfirm}
+            />
+          </>
         )}
 
         {panel === 'none' && !selected && (
@@ -1298,6 +1395,75 @@ function CredentialDetail({
 
 // ─── Settings Panel ────────────────────────────────────────────────────────────
 
+// Invite a teammate to the current (server-synced) vault. The server emails them
+// only an accept link; the vault password is shared separately by the inviter.
+function InvitePeople({ inviteUser }: { inviteUser: (email: string) => Promise<void> }) {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const [err, setErr] = useState('')
+
+  const send = async () => {
+    const value = email.trim()
+    if (!value || status === 'sending') return
+    if (!value.includes('@')) { setErr('Enter a valid email address.'); return }
+    setErr('')
+    setStatus('sending')
+    try {
+      await inviteUser(value)
+      setStatus('sent')
+      setEmail('')
+      setTimeout(() => setStatus('idle'), 4000)
+    } catch (e) {
+      setStatus('idle')
+      setErr(e instanceof Error ? e.message : 'Failed to send invite.')
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--color-border-secondary)' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
+        Invite people
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="email"
+          value={email}
+          placeholder="teammate@email.com"
+          onChange={(e) => { setEmail(e.target.value); setErr('') }}
+          onKeyDown={(e) => e.key === 'Enter' && send()}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: '8px 10px',
+            border: '1px solid var(--color-border-primary)',
+            borderRadius: 6,
+            background: 'var(--color-bg-primary)',
+            color: 'var(--color-text-primary)',
+            fontSize: 13,
+            outline: 'none',
+            fontFamily: 'inherit',
+            boxSizing: 'border-box',
+          }}
+        />
+        <Button type="button" onClick={send} isDisabled={status === 'sending'} color="primary" size="sm">
+          {status === 'sending' ? 'Sending…' : 'Invite'}
+        </Button>
+      </div>
+      {status === 'sent' && (
+        <p style={{ fontSize: 12, color: 'var(--color-text-success-primary, #079455)', margin: '8px 0 0' }}>
+          ✓ Invite sent. Share the vault password with them separately — it isn’t in the email.
+        </p>
+      )}
+      {err && <p style={{ fontSize: 12, color: 'var(--color-fg-error-primary, #d92d20)', margin: '8px 0 0' }}>{err}</p>}
+      {status === 'idle' && !err && (
+        <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', margin: '8px 0 0' }}>
+          They’ll get an accept link by email. Give them this vault’s password yourself — the server never sees it.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function SettingsPanel({
   settings,
   onApply,
@@ -1315,7 +1481,7 @@ function SettingsPanel({
   error: string | null
   clearError: () => void
 }) {
-  const { serverSession, logoutServer } = useVault()
+  const { serverSession, logoutServer, inviteUser } = useVault()
   const [vaultIdInput, setVaultIdInput] = useState(settings.vaultId)
   const [saved, setSaved] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
@@ -1406,6 +1572,7 @@ function SettingsPanel({
                 <Button type="button" onClick={() => logoutServer()} color="secondary" size="sm">
                   Disconnect
                 </Button>
+                {serverSession && <InvitePeople inviteUser={inviteUser} />}
               </>
             ) : uploading ? (
               <UploadToServer onClose={() => setUploading(false)} />
