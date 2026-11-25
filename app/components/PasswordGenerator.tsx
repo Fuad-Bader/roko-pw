@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { generatePassword, passwordStrength } from '@/lib/crypto'
 import type { PasswordOptions } from '@/lib/types'
 import { Button } from '@/components/base/buttons/button'
+import { Check, Copy01, RefreshCw01 } from '@untitledui/icons'
 
 const STRENGTH_COLORS = [
   'bg-error-solid',
@@ -52,16 +53,18 @@ export function PasswordGenerator({ onSelect }: Props) {
           onClick={copy}
           className="shrink-0 text-xs text-tertiary transition hover:text-primary"
           title="Copy to clipboard"
+          aria-label="Copy to clipboard"
         >
-          {copied ? <span className="text-success-primary">✓</span> : '📋'}
+          {copied ? <Check className="size-4 text-success-primary" /> : <Copy01 className="size-4" />}
         </button>
         <button
           type="button"
           onClick={regenerate}
           className="shrink-0 text-xs text-tertiary transition hover:text-primary"
           title="Regenerate"
+          aria-label="Regenerate"
         >
-          🔄
+          <RefreshCw01 className="size-4" />
         </button>
       </div>
 
@@ -111,7 +114,7 @@ export function PasswordGenerator({ onSelect }: Props) {
             onClick={() => setOpts((o) => ({ ...o, [key]: !o[key] }))}
             className={`rounded px-2 py-0.5 text-xs font-medium transition ${
               opts[key]
-                ? 'bg-brand-solid text-white'
+                ? 'bg-brand-solid text-on-brand'
                 : 'bg-quaternary text-tertiary hover:bg-tertiary'
             }`}
           >

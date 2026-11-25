@@ -23,7 +23,7 @@ export const styles = sortCx({
     sizes: {
         xs: {
             root: [
-                "gap-1 rounded-lg px-2.5 py-1.5 text-sm font-semibold before:rounded-[7px] data-icon-only:p-2",
+                "gap-1 rounded-full px-2.5 py-1.5 text-sm font-semibold before:rounded-full data-icon-only:p-2",
                 "in-data-input-wrapper:px-3.5 in-data-input-wrapper:py-2.5 in-data-input-wrapper:data-icon-only:p-2.5",
                 "*:data-icon:size-4 *:data-icon:stroke-[2.25px]",
             ].join(" "),
@@ -31,24 +31,24 @@ export const styles = sortCx({
         },
         sm: {
             root: [
-                "gap-1 rounded-lg px-3 py-2 text-sm font-semibold before:rounded-[7px] data-icon-only:p-2",
+                "gap-1 rounded-full px-3 py-2 text-sm font-semibold before:rounded-full data-icon-only:p-2",
                 "in-data-input-wrapper:px-3.5 in-data-input-wrapper:py-2.5 in-data-input-wrapper:data-icon-only:p-2.5",
             ].join(" "),
             linkRoot: "gap-1 *:data-text:underline-offset-3",
         },
         md: {
             root: [
-                "gap-1 rounded-lg px-3.5 py-2.5 text-sm font-semibold before:rounded-[7px] data-icon-only:p-2.5",
+                "gap-1 rounded-full px-3.5 py-2.5 text-sm font-semibold before:rounded-full data-icon-only:p-2.5",
                 "in-data-input-wrapper:gap-1.5 in-data-input-wrapper:px-4 in-data-input-wrapper:text-md in-data-input-wrapper:data-icon-only:p-3",
             ].join(" "),
             linkRoot: "gap-1 *:data-text:underline-offset-4",
         },
         lg: {
-            root: "gap-1.5 rounded-lg px-4 py-2.5 text-md font-semibold before:rounded-[7px] data-icon-only:p-3",
+            root: "gap-1.5 rounded-full px-4 py-2.5 text-md font-semibold before:rounded-full data-icon-only:p-3",
             linkRoot: "gap-1.5 *:data-text:underline-offset-4",
         },
         xl: {
-            root: "gap-1.5 rounded-lg px-4.5 py-3 text-md font-semibold before:rounded-[7px] data-icon-only:p-3.5",
+            root: "gap-1.5 rounded-full px-4.5 py-3 text-md font-semibold before:rounded-full data-icon-only:p-3.5",
             linkRoot: "gap-1.5 *:data-text:underline-offset-4",
         },
     },
@@ -56,16 +56,16 @@ export const styles = sortCx({
     colors: {
         primary: {
             root: [
-                "bg-brand-solid text-white shadow-xs-skeuomorphic ring-1 ring-transparent ring-inset hover:bg-brand-solid_hover data-loading:bg-brand-solid_hover",
-                // Inner border gradient
-                "before:absolute before:inset-px before:border before:border-white/12 before:mask-b-from-0%",
+                // Roko: flat ember pill with ink text (white on ember fails contrast)
+                "bg-brand-solid text-on-brand ring-1 ring-transparent ring-inset hover:-translate-y-px hover:bg-brand-solid_hover data-loading:bg-brand-solid_hover",
                 // Icon styles
-                "*:data-icon:text-white/60 hover:*:data-icon:text-white/70",
+                "*:data-icon:text-on-brand/70 hover:*:data-icon:text-on-brand",
             ].join(" "),
         },
         secondary: {
             root: [
-                "bg-primary text-secondary shadow-xs-skeuomorphic ring-1 ring-primary ring-inset hover:bg-primary_hover hover:text-secondary_hover data-loading:bg-primary_hover",
+                // Roko outline pill: border darkens to ink on hover
+                "bg-primary text-secondary ring-1 ring-primary ring-inset hover:-translate-y-px hover:text-primary hover:ring-fg-primary data-loading:bg-primary_hover",
                 // Icon styles
                 "*:data-icon:text-fg-quaternary hover:*:data-icon:text-fg-quaternary_hover",
             ].join(" "),

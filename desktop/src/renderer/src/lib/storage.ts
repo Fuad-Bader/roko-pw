@@ -1,16 +1,4 @@
-import type { EncryptedVault, StorageBackend } from '@/lib/types'
-
-// Server-related helpers live in the shared lib — re-export them here via relative
-// path so the Vite alias override for @/lib/storage doesn't create a circular import.
-export type { RemoteConfig } from '../../../../../lib/storage'
-export {
-  listServerVaults,
-  createServerVault,
-  probeServer,
-  loginServer,
-  verifyServerOtp,
-  inviteToVault,
-} from '../../../../../lib/storage'
+import type { EncryptedVault } from '@/lib/types'
 
 declare global {
   interface Window {
@@ -23,23 +11,15 @@ declare global {
   }
 }
 
-// These signatures match the web storage.ts so VaultProvider works unmodified.
-// The backend/vaultId params are ignored — Electron always stores in userData/vault.rkpw.
+// Same shape as the web lib/storage.ts so VaultProvider works unmodified.
+// Electron stores the personal vault in userData/vault.rkpw. Org vaults are
+// never stored on the device (they are read and written through lib/orgApi.ts).
 
-export async function loadVault(
-  _backend: StorageBackend,
-  _id: string,
-  _remote?: unknown,
-): Promise<EncryptedVault | null> {
+export async function loadVault(): Promise<EncryptedVault | null> {
   return window.electronAPI.loadVault()
 }
 
-export async function saveVault(
-  _backend: StorageBackend,
-  _id: string,
-  vault: EncryptedVault,
-  _remote?: unknown,
-): Promise<void> {
+export async function saveVault(vault: EncryptedVault): Promise<void> {
   return window.electronAPI.saveVault(vault)
 }
 

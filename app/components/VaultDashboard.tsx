@@ -1,13 +1,20 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import type { VaultEntry, EntryType, EntryDraft, Collection } from '@/lib/types'
+import type { VaultEntry, EntryType, EntryDraft, Collection, CredentialTemplate } from '@/lib/types'
 import { useVault } from './VaultProvider'
-import { useTheme, ACCENTS } from './ThemeProvider'
+import { useTheme } from './ThemeProvider'
+import { RokoLogo } from './RokoLogo'
 import { CredentialForm } from './CredentialForm'
+import { ENTRY_TYPES } from './entryMeta'
+import { InfraDetail } from './InfraDetail'
+import { FieldRow } from './FieldRow'
+import { TemplateManager } from './TemplateManager'
+import { TemplateTile, TemplateGlyph } from './TemplateIcon'
+import { TemplateFieldsView } from './InfraDetail'
+import { DEFAULT_PORT, hostWithPort, vpnProtocolMeta, inspectPrivateKey } from '@/lib/infra'
 import { PasswordGenerator } from './PasswordGenerator'
 import { RecoveryPhraseDisplay } from './RecoveryPhraseDisplay'
-import { UploadToServer } from './UploadToServer'
 import { Button } from '@/components/base/buttons/button'
 import { ModalOverlay, Modal, Dialog } from '@/components/application/modals/modal'
 import {
@@ -26,28 +33,58 @@ import {
   Sun,
   LockUnlocked01,
   ChevronRight,
-  Eye,
-  EyeOff,
-  Copy01,
   RefreshCw01,
   ShieldTick,
+  Edit03,
+  XClose,
+  Building07,
+  HardDrive,
+  Download01,
+  Eye,
+  LogOut01,
+  SwitchHorizontal01,
+  CheckCircle,
+  AlertTriangle,
+  LayoutAlt04,
 } from '@untitledui/icons'
 
-type Panel = 'none' | 'add' | 'edit' | 'settings' | 'generator'
-type Category = 'all' | 'favorites' | 'logins' | 'cards' | 'notes' | 'passkeys' | 'trash'
-type View = { kind: 'category'; category: Category } | { kind: 'collection'; id: string }
+type Panel = 'none' | 'add' | 'edit' | 'settings' | 'generator' | 'templates'
+type Category = 'all' | 'favorites' | 'ssh' | 'rdp' | 'vpn' | 'logins' | 'cards' | 'notes' | 'passkeys' | 'trash'
+type View = { kind: 'category'; category: Category } | { kind: 'collection'; id: string } | { kind: 'template'; id: string }
 
-const NAV_ITEMS: { id: Category; label: string; icon: React.ElementType }[] = [
-  { id: 'all', label: 'All items', icon: Grid01 },
-  { id: 'favorites', label: 'Favorites', icon: Star01 },
-  { id: 'logins', label: 'Logins', icon: Lock01 },
-  { id: 'cards', label: 'Cards', icon: CreditCard01 },
-  { id: 'notes', label: 'Secure notes', icon: File01 },
-  { id: 'passkeys', label: 'Passkeys', icon: Fingerprint01 },
-  { id: 'trash', label: 'Trash', icon: Trash01 },
+type NavItem = { id: Category; label: string; icon: React.ElementType }
+
+// Sidebar sections. Infrastructure comes first: this is a developer / enterprise vault.
+const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: 'Library',
+    items: [
+      { id: 'all', label: 'All items', icon: Grid01 },
+      { id: 'favorites', label: 'Favorites', icon: Star01 },
+    ],
+  },
+  {
+    title: 'Infrastructure',
+    items: [
+      { id: 'ssh', label: ENTRY_TYPES.ssh.plural, icon: ENTRY_TYPES.ssh.icon },
+      { id: 'rdp', label: ENTRY_TYPES.rdp.plural, icon: ENTRY_TYPES.rdp.icon },
+      { id: 'vpn', label: ENTRY_TYPES.vpn.plural, icon: ENTRY_TYPES.vpn.icon },
+    ],
+  },
+  {
+    title: 'Credentials',
+    items: [
+      { id: 'logins', label: 'Logins', icon: Lock01 },
+      { id: 'passkeys', label: 'Passkeys', icon: Fingerprint01 },
+      { id: 'notes', label: 'Secure notes', icon: File01 },
+      { id: 'cards', label: 'Cards', icon: CreditCard01 },
+      { id: 'trash', label: 'Trash', icon: Trash01 },
+    ],
+  },
 ]
 
-const TYPE_EMOJI: Record<EntryType, string> = { login: '🔑', card: '💳', note: '📝', passkey: '🔐' }
+const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items)
+
 
 function inCategory(e: VaultEntry, cat: Category): boolean {
   if (cat === 'trash') return !!e.deletedAt
@@ -55,6 +92,9 @@ function inCategory(e: VaultEntry, cat: Category): boolean {
   switch (cat) {
     case 'all': return true
     case 'favorites': return e.favorite
+    case 'ssh': return e.type === 'ssh'
+    case 'rdp': return e.type === 'rdp'
+    case 'vpn': return e.type === 'vpn'
     case 'logins': return e.type === 'login'
     case 'cards': return e.type === 'card'
     case 'notes': return e.type === 'note'
@@ -62,45 +102,67 @@ function inCategory(e: VaultEntry, cat: Category): boolean {
   }
 }
 
+/** One-line summary shown under an infrastructure item's title in the list. */
+function infraSubtitle(e: VaultEntry, template?: CredentialTemplate): string {
+  if (e.type === 'custom') {
+    // First plain (non-secret) value, so the list shows something recognisable.
+    const f = template?.fields.find((x) => (x.kind === 'text' || x.kind === 'url' || x.kind === 'email' || x.kind === 'number') && e.fields?.[x.id])
+    return f ? e.fields![f.id] : template?.name ?? 'Custom item'
+  }
+  if (e.type === 'ssh') {
+    const target = hostWithPort(e.host, e.port, DEFAULT_PORT.ssh)
+    if (target) return e.username ? `${e.username}@${target}` : target
+    const algo = e.privateKey ? inspectPrivateKey(e.privateKey).algorithm : null
+    return algo ? `SSH key · ${algo}` : 'SSH key'
+  }
+  if (e.type === 'rdp') {
+    const user = e.username ? (e.domain ? `${e.domain}\\${e.username}` : e.username) : ''
+    const target = hostWithPort(e.host, e.port, DEFAULT_PORT.rdp)
+    return user ? `${user} @ ${target}` : target
+  }
+  const proto = vpnProtocolMeta(e.vpnProtocol).label
+  return e.host ? `${proto} · ${e.host}` : proto
+}
+
 function addTypeFor(view: View): EntryType {
   if (view.kind !== 'category') return 'login'
   if (view.category === 'cards') return 'card'
   if (view.category === 'notes') return 'note'
   if (view.category === 'passkeys') return 'passkey'
+  if (view.category === 'ssh') return 'ssh'
+  if (view.category === 'rdp') return 'rdp'
+  if (view.category === 'vpn') return 'vpn'
   return 'login'
 }
 
 function Logo({ size = 24 }: { size?: number }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+  return <RokoLogo size={size} />
+}
+
+function EntryAvatar({ entry, size = 32, template }: { entry: VaultEntry; size?: number; template?: CredentialTemplate }) {
+  if (template) return <TemplateTile icon={template.icon} size={size} />
+  const meta = ENTRY_TYPES[entry.type]
+  if (meta.infra) {
+    const Icon = meta.icon
+    return (
       <span
         style={{
           width: size,
           height: size,
-          borderRadius: 6,
-          background: 'var(--color-bg-brand-solid)',
+          borderRadius: Math.round(size * 0.3),
+          background: 'var(--ink-900)',
+          boxShadow: 'inset 0 0 0 1px rgb(255 255 255 / 0.08)',
+          color: 'var(--ember-500)',
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
+          flexShrink: 0,
         }}
       >
-        <Lock01 size={size * 0.6} color="#fff" />
+        <Icon size={Math.round(size * 0.5)} />
       </span>
-      <span
-        style={{
-          fontWeight: 700,
-          fontSize: size * 0.64,
-          letterSpacing: '-0.02em',
-          color: 'var(--color-text-primary)',
-        }}
-      >
-        Roko<span style={{ color: 'var(--color-bg-brand-solid)' }}>PW</span>
-      </span>
-    </span>
-  )
-}
-
-function EntryAvatar({ entry, size = 32 }: { entry: VaultEntry; size?: number }) {
+    )
+  }
   const favicon =
     entry.type === 'login' && entry.url
       ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(entry.url)}`
@@ -112,7 +174,7 @@ function EntryAvatar({ entry, size = 32 }: { entry: VaultEntry; size?: number })
         height: size,
         borderRadius: entry.type === 'card' ? 8 : '50%',
         background: 'var(--color-bg-brand-solid)',
-        color: '#fff',
+        color: 'var(--color-on-brand)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -134,13 +196,13 @@ function EntryAvatar({ entry, size = 32 }: { entry: VaultEntry; size?: number })
       ) : entry.type === 'login' ? (
         entry.title.slice(0, 2).toUpperCase()
       ) : (
-        TYPE_EMOJI[entry.type]
+        (() => { const Icon = meta.icon; return <Icon size={Math.round(size * 0.5)} /> })()
       )}
     </span>
   )
 }
 
-export function VaultDashboard() {
+export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin: () => void }) {
   const {
     entries,
     collections,
@@ -155,25 +217,26 @@ export function VaultDashboard() {
     addCollection,
     renameCollection,
     deleteCollection,
-    settings,
-    applySettings,
-    exportToFile,
-    setupRecovery,
+    mode,
+    org,
+    readOnly,
+    syncState,
+    templates,
     clearRecoveryPhrase,
     recoveryPhrase,
-    hasRecovery,
     needsNewPassword,
     changeMasterPassword,
-    error,
-    clearError,
   } = useVault()
-  const { theme, toggleTheme, accent, setAccent } = useTheme()
+  const { theme, toggleTheme } = useTheme()
   const [query, setQuery] = useState('')
   const [panel, setPanel] = useState<Panel>('none')
   const [view, setView] = useState<View>({ kind: 'category', category: 'all' })
   const [editing, setEditing] = useState<VaultEntry | null>(null)
   const [selected, setSelected] = useState<VaultEntry | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  // Set when "Use" is clicked in the template manager.
+  const [addTemplateId, setAddTemplateId] = useState<string | undefined>()
+  const [addTypeOverride, setAddTypeOverride] = useState<EntryType | undefined>()
 
   // Collections UI
   const [addingCollection, setAddingCollection] = useState(false)
@@ -185,12 +248,17 @@ export function VaultDashboard() {
   const [dragOverCollection, setDragOverCollection] = useState<string | null>(null)
 
   const activeCollectionId = view.kind === 'collection' ? view.id : null
+  const tplById = useMemo(() => new Map(templates.map((t) => [t.id, t])), [templates])
+  const customTemplates = templates.filter((t) => t.base === 'custom')
 
   const counts = useMemo(() => {
     const live = entries.filter((e) => !e.deletedAt)
     return {
       all: live.length,
       favorites: live.filter((e) => e.favorite).length,
+      ssh: live.filter((e) => e.type === 'ssh').length,
+      rdp: live.filter((e) => e.type === 'rdp').length,
+      vpn: live.filter((e) => e.type === 'vpn').length,
       logins: live.filter((e) => e.type === 'login').length,
       cards: live.filter((e) => e.type === 'card').length,
       notes: live.filter((e) => e.type === 'note').length,
@@ -211,7 +279,9 @@ export function VaultDashboard() {
     const base =
       view.kind === 'collection'
         ? entries.filter((e) => !e.deletedAt && e.collectionId === view.id)
-        : entries.filter((e) => inCategory(e, view.category))
+        : view.kind === 'template'
+          ? entries.filter((e) => !e.deletedAt && e.templateId === view.id)
+          : entries.filter((e) => inCategory(e, view.category))
     const q = query.trim().toLowerCase()
     if (!q) return base
     return base.filter(
@@ -219,14 +289,22 @@ export function VaultDashboard() {
         e.title.toLowerCase().includes(q) ||
         e.username.toLowerCase().includes(q) ||
         e.url.toLowerCase().includes(q) ||
-        (e.cardholder ?? '').toLowerCase().includes(q),
+        (e.cardholder ?? '').toLowerCase().includes(q) ||
+        [e.host, e.domain, e.gateway, e.jumpHost].some((v) => (v ?? '').toLowerCase().includes(q)) ||
+        // Plain (non-secret) template field values are searchable too.
+        (!!e.templateId &&
+          !!tplById.get(e.templateId)?.fields.some(
+            (f) => f.kind !== 'secret' && f.kind !== 'secretMultiline' && (e.fields?.[f.id] ?? '').toLowerCase().includes(q),
+          )),
     )
-  }, [entries, query, view])
+  }, [entries, query, view, tplById])
 
   const viewTitle =
     view.kind === 'collection'
       ? collections.find((c) => c.id === view.id)?.name ?? 'Collection'
-      : NAV_ITEMS.find((n) => n.id === view.category)?.label ?? 'All items'
+      : view.kind === 'template'
+        ? tplById.get(view.id)?.name ?? 'Template'
+        : NAV_ITEMS.find((n) => n.id === view.category)?.label ?? 'All items'
 
   const openEdit = useCallback((entry: VaultEntry) => {
     setEditing(entry)
@@ -237,6 +315,8 @@ export function VaultDashboard() {
   const closePanel = useCallback(() => {
     setPanel('none')
     setEditing(null)
+    setAddTemplateId(undefined)
+    setAddTypeOverride(undefined)
   }, [])
 
   const handleAdd = async (data: EntryDraft) => {
@@ -272,6 +352,8 @@ export function VaultDashboard() {
     setPanel((prev) => (prev === p ? 'none' : p))
     setEditing(null)
     setSelected(null)
+    setAddTemplateId(undefined)
+    setAddTypeOverride(undefined)
   }
 
   const selectView = (v: View) => {
@@ -329,7 +411,7 @@ export function VaultDashboard() {
       >
         {/* Logo */}
         <div style={{ padding: '16px 12px 12px', borderBottom: '1px solid var(--color-border-secondary)' }}>
-          <Logo size={22} />
+          <Logo size={26} />
         </div>
 
         {/* Search */}
@@ -343,7 +425,7 @@ export function VaultDashboard() {
               border: '1px solid var(--color-border-primary)',
               borderRadius: 8,
               background: 'var(--color-bg-primary)',
-              boxShadow: '0 1px 2px 0 rgba(16,24,40,.05)',
+              boxShadow: 'var(--roko-shadow-sm)',
             }}
           >
             <SearchMd size={14} color="var(--color-fg-quaternary)" />
@@ -367,19 +449,12 @@ export function VaultDashboard() {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '4px 10px', overflowY: 'auto' }}>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--color-text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '.06em',
-              padding: '6px 8px 6px',
-            }}
-          >
-            Library
-          </div>
-          {NAV_ITEMS.map((item) => {
+          {NAV_SECTIONS.map((section, si) => (
+            <div key={section.title}>
+              <div className="roko-eyebrow" style={{ display: 'flex', fontSize: 10, padding: si === 0 ? '8px 8px 8px' : '16px 8px 8px' }}>
+                {section.title}
+              </div>
+          {section.items.map((item) => {
             const active = view.kind === 'category' && view.category === item.id
             const Icon = item.icon
             const count = counts[item.id]
@@ -396,7 +471,7 @@ export function VaultDashboard() {
                   borderRadius: 6,
                   background: active ? 'var(--color-bg-primary)' : 'transparent',
                   boxShadow: active ? '0 1px 2px 0 rgba(16,24,40,.05)' : 'none',
-                  color: active ? 'var(--color-brand-700)' : 'var(--color-text-secondary)',
+                  color: active ? 'var(--color-text-brand-secondary)' : 'var(--color-text-secondary)',
                   fontSize: 13,
                   fontWeight: active ? 600 : 500,
                   border: 0,
@@ -416,24 +491,61 @@ export function VaultDashboard() {
               </button>
             )
           })}
+            </div>
+          ))}
+
+          {/* Templates: one category per template built from scratch, plus the manager */}
+          <div className="roko-eyebrow" style={{ display: 'flex', fontSize: 10, padding: '16px 8px 8px' }}>
+            <span style={{ flex: 1 }}>Templates</span>
+          </div>
+          {customTemplates.map((t) => {
+            const active = view.kind === 'template' && view.id === t.id
+            const count = entries.filter((e) => !e.deletedAt && e.templateId === t.id).length
+            return (
+              <button
+                key={t.id}
+                onClick={() => selectView({ kind: 'template', id: t.id })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px', borderRadius: 6,
+                  background: active ? 'var(--color-bg-primary)' : 'transparent',
+                  boxShadow: active ? 'var(--roko-shadow-sm)' : 'none',
+                  color: active ? 'var(--color-text-brand-secondary)' : 'var(--color-text-secondary)',
+                  fontSize: 13, fontWeight: active ? 600 : 500, border: 0, cursor: 'pointer', textAlign: 'left', marginBottom: 1,
+                }}
+              >
+                <span style={{ width: 15, display: 'inline-flex', justifyContent: 'center' }}><TemplateGlyph icon={t.icon} size={15} /></span>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                {count > 0 && <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>{count}</span>}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => openPanel('templates')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px', borderRadius: 6,
+              background: panel === 'templates' ? 'var(--color-bg-primary)' : 'transparent',
+              color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 500, border: 0, cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <LayoutAlt04 size={15} />
+            <span style={{ flex: 1 }}>Manage templates</span>
+          </button>
 
           {/* Collections */}
           <div
+            className="roko-eyebrow"
             style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--color-text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '.06em',
-              padding: '14px 8px 6px',
+              fontSize: 10,
+              padding: '16px 8px 8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}
           >
-            Collections
+            <span style={{ flex: 1 }}>Collections</span>
             <button
               onClick={() => { setAddingCollection(true); setNewCollectionName('') }}
+              hidden={readOnly}
               title="New collection"
               style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', display: 'flex', padding: 0 }}
             >
@@ -522,18 +634,18 @@ export function VaultDashboard() {
                   borderRadius: 6,
                   marginBottom: 1,
                   background: isOver
-                    ? 'var(--color-brand-100)'
+                    ? 'color-mix(in srgb, var(--ember-500) 12%, transparent)'
                     : active
                       ? 'var(--color-bg-primary)'
                       : 'transparent',
                   boxShadow: isOver ? 'inset 0 0 0 1px var(--color-border-brand)' : 'none',
-                  color: active ? 'var(--color-brand-700)' : 'var(--color-text-secondary)',
+                  color: active ? 'var(--color-text-brand-secondary)' : 'var(--color-text-secondary)',
                   fontSize: 13,
                   fontWeight: active ? 600 : 500,
                   cursor: 'pointer',
                 }}
               >
-                <Folder size={14} color={active ? 'var(--color-brand-600)' : 'var(--color-fg-quaternary)'} />
+                <Folder size={14} color={active ? 'var(--color-fg-brand-primary)' : 'var(--color-fg-quaternary)'} />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
                 {collectionCounts[c.id] > 0 && (
                   <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{collectionCounts[c.id]}</span>
@@ -541,16 +653,20 @@ export function VaultDashboard() {
                 <button
                   onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.name) }}
                   title="Rename"
-                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', fontSize: 11, padding: 0 }}
+                  hidden={readOnly}
+                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', display: 'flex', padding: 0 }}
+                  aria-label="Rename collection"
                 >
-                  ✎
+                  <Edit03 size={12} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteCollection(c.id) }}
+                  hidden={readOnly}
                   title={collectionConfirm === c.id ? 'Click again to delete' : 'Delete collection'}
-                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: collectionConfirm === c.id ? 'var(--color-fg-error-primary)' : 'var(--color-fg-quaternary)', fontSize: 11, padding: 0 }}
+                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: collectionConfirm === c.id ? 'var(--color-fg-error-primary)' : 'var(--color-fg-quaternary)', display: 'flex', padding: 0 }}
+                  aria-label="Delete collection"
                 >
-                  🗑
+                  <Trash01 size={12} />
                 </button>
               </div>
             )
@@ -568,33 +684,16 @@ export function VaultDashboard() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px' }}>
-            <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-              {ACCENTS.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => setAccent(a.id)}
-                  title={a.label}
-                  style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: '50%',
-                    background: a.color,
-                    border: accent === a.id ? `2px solid var(--color-text-primary)` : '2px solid transparent',
-                    cursor: 'pointer',
-                    padding: 0,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              ))}
-            </div>
+            <span style={{ flex: 1, font: '500 11px/1 var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-tertiary)' }}>
+              {theme === 'dark' ? 'Dark' : 'Light'} mode
+            </span>
             <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
+                width: 30,
+                height: 30,
+                borderRadius: 999,
                 border: '1px solid var(--color-border-primary)',
                 background: 'var(--color-bg-primary)',
                 color: 'var(--color-text-secondary)',
@@ -626,7 +725,7 @@ export function VaultDashboard() {
                 height: 28,
                 borderRadius: '50%',
                 background: 'var(--color-bg-brand-solid)',
-                color: '#fff',
+                color: 'var(--color-on-brand)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -639,10 +738,11 @@ export function VaultDashboard() {
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                RokoPW Vault
+                {mode === 'org' ? org.activeVault?.name ?? 'Org vault' : 'Personal vault'}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                {settings.backend === 'remote' ? '☁ Remote sync' : '💾 Local'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                {mode === 'org' ? <Building07 size={11} /> : <HardDrive size={11} />}
+                {mode === 'org' ? (readOnly ? 'View only' : syncState === 'saving' ? 'Saving…' : syncState === 'error' ? 'Not saved' : 'Synced') : 'This device'}
               </div>
             </div>
             <button
@@ -687,7 +787,9 @@ export function VaultDashboard() {
               {filtered.length} item{filtered.length !== 1 ? 's' : ''}
             </div>
           </div>
-          {view.kind === 'category' && view.category === 'trash' ? null : (
+          {readOnly ? (
+            <span className="roko-tag" style={{ gap: 4 }}><Eye size={11} /> View only</span>
+          ) : view.kind === 'category' && view.category === 'trash' ? null : (
             <button
               onClick={() => openPanel('add')}
               style={{
@@ -696,14 +798,14 @@ export function VaultDashboard() {
                 gap: 5,
                 height: 32,
                 padding: '0 12px',
-                borderRadius: 6,
+                borderRadius: 999,
                 background: 'var(--color-bg-brand-solid)',
-                color: '#fff',
+                color: 'var(--color-on-brand)',
                 fontSize: 13,
                 fontWeight: 600,
                 border: 0,
                 cursor: 'pointer',
-                boxShadow: '0 1px 2px 0 rgba(16,24,40,.05)',
+                boxShadow: 'var(--roko-shadow-sm)',
               }}
             >
               <Plus size={13} />
@@ -737,13 +839,13 @@ export function VaultDashboard() {
                   <p style={{ fontSize: 13, margin: 0 }}>
                     {view.kind === 'collection'
                       ? 'Drag items onto this collection, or add a new one.'
-                      : view.category === 'trash'
+                      : view.kind === 'category' && view.category === 'trash'
                         ? 'Deleted items will appear here.'
                         : 'Add your first item to get started.'}
                   </p>
                 )}
               </div>
-              {!(view.kind === 'category' && view.category === 'trash') && !query && (
+              {!readOnly && !(view.kind === 'category' && view.category === 'trash') && !query && (
                 <button
                   onClick={() => openPanel('add')}
                   style={{
@@ -752,9 +854,9 @@ export function VaultDashboard() {
                     gap: 6,
                     height: 34,
                     padding: '0 14px',
-                    borderRadius: 6,
+                    borderRadius: 999,
                     background: 'var(--color-bg-brand-solid)',
-                    color: '#fff',
+                    color: 'var(--color-on-brand)',
                     fontSize: 13,
                     fontWeight: 600,
                     border: 0,
@@ -769,7 +871,9 @@ export function VaultDashboard() {
             filtered.map((entry) => {
               const isSelected = selected?.id === entry.id
               const subtitle =
-                entry.type === 'card'
+                ENTRY_TYPES[entry.type].infra
+                  ? infraSubtitle(entry, entry.templateId ? tplById.get(entry.templateId) : undefined)
+                  : entry.type === 'card'
                   ? entry.cardNumber
                     ? `•••• ${entry.cardNumber.replace(/\s/g, '').slice(-4)}`
                     : 'Card'
@@ -779,7 +883,7 @@ export function VaultDashboard() {
               return (
                 <div
                   key={entry.id}
-                  draggable={!entry.deletedAt}
+                  draggable={!entry.deletedAt && !readOnly}
                   onDragStart={(e) => { setDragId(entry.id); e.dataTransfer.setData('text/plain', entry.id); e.dataTransfer.effectAllowed = 'move' }}
                   onDragEnd={() => { setDragId(null); setDragOverCollection(null) }}
                   onClick={() => { setSelected(isSelected ? null : entry); setPanel('none') }}
@@ -789,19 +893,19 @@ export function VaultDashboard() {
                     gap: 10,
                     padding: '9px 14px',
                     borderBottom: '1px solid var(--color-border-secondary)',
-                    background: isSelected ? 'var(--color-brand-50)' : 'transparent',
+                    background: isSelected ? 'color-mix(in srgb, var(--ember-500) 12%, transparent)' : 'transparent',
                     opacity: dragId === entry.id ? 0.5 : 1,
                     cursor: 'pointer',
                     transition: 'background 0.1s',
                   }}
                 >
-                  <EntryAvatar entry={entry} size={32} />
+                  <EntryAvatar entry={entry} size={32} template={entry.templateId ? tplById.get(entry.templateId) : undefined} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
                         fontWeight: 600,
                         fontSize: 13,
-                        color: isSelected ? 'var(--color-brand-700)' : 'var(--color-text-primary)',
+                        color: isSelected ? 'var(--color-text-brand-secondary)' : 'var(--color-text-primary)',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -813,7 +917,7 @@ export function VaultDashboard() {
                       {subtitle}
                     </div>
                   </div>
-                  {!entry.deletedAt && (
+                  {!entry.deletedAt && !readOnly && (
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleFavorite(entry.id) }}
                       title={entry.favorite ? 'Unfavorite' : 'Favorite'}
@@ -858,13 +962,19 @@ export function VaultDashboard() {
       <main style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--color-bg-primary)' }}>
         {panel === 'add' && (
           <RightPanel title="Add item" onClose={closePanel}>
-            <CredentialForm defaultType={addTypeFor(view)} onSave={handleAdd} onCancel={closePanel} />
+            <CredentialForm
+              defaultType={addTypeOverride ?? addTypeFor(view)}
+              templates={templates}
+              defaultTemplateId={addTemplateId ?? (view.kind === 'template' ? view.id : undefined)}
+              onSave={handleAdd}
+              onCancel={closePanel}
+            />
           </RightPanel>
         )}
 
         {panel === 'edit' && editing && (
           <RightPanel title="Edit item" onClose={closePanel}>
-            <CredentialForm initial={editing} onSave={handleUpdate} onCancel={closePanel} />
+            <CredentialForm initial={editing} templates={templates} onSave={handleUpdate} onCancel={closePanel} />
           </RightPanel>
         )}
 
@@ -874,23 +984,29 @@ export function VaultDashboard() {
           </RightPanel>
         )}
 
+        {panel === 'templates' && (
+          <RightPanel title="Templates" onClose={closePanel}>
+            <TemplateManager
+              onUse={(id) => {
+                setAddTemplateId(id.startsWith('builtin:') ? undefined : id)
+                setAddTypeOverride(id.startsWith('builtin:') ? (id.slice(8) as EntryType) : undefined)
+                setPanel('add')
+              }}
+            />
+          </RightPanel>
+        )}
+
         {panel === 'settings' && (
           <RightPanel title="Settings" onClose={closePanel}>
-            <SettingsPanel
-              settings={settings}
-              onApply={applySettings}
-              onExport={exportToFile}
-              onSetupRecovery={setupRecovery}
-              hasRecovery={hasRecovery}
-              error={error}
-              clearError={clearError}
-            />
+            <SettingsPanel onOpenAdmin={onOpenAdmin} />
           </RightPanel>
         )}
 
         {panel === 'none' && selected && (
           <CredentialDetail
             entry={selected}
+            template={selected.templateId ? tplById.get(selected.templateId) : undefined}
+            readOnly={readOnly}
             collections={collections}
             onEdit={openEdit}
             onDelete={handleDelete}
@@ -918,7 +1034,7 @@ export function VaultDashboard() {
                 width: 64,
                 height: 64,
                 borderRadius: 16,
-                background: 'var(--color-brand-100)',
+                background: 'color-mix(in srgb, var(--ember-500) 12%, transparent)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1006,7 +1122,7 @@ function RightPanel({
           }}
           aria-label="Close"
         >
-          ✕
+          <XClose size={15} />
         </button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>{children}</div>
@@ -1015,66 +1131,6 @@ function RightPanel({
 }
 
 // ─── Credential detail view ────────────────────────────────────────────────────
-
-function FieldRow({ label, value, secret }: { label: string; value: string; secret?: boolean }) {
-  const [revealed, setRevealed] = useState(false)
-  const [copied, setCopied] = useState(false)
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(value)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
-        {label}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '9px 12px',
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--color-border-secondary)',
-          borderRadius: 8,
-        }}
-      >
-        <span
-          style={{
-            flex: 1,
-            fontFamily: secret ? 'var(--font-mono, monospace)' : 'inherit',
-            fontSize: 13,
-            color: 'var(--color-text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {secret && !revealed ? '••••••••••••' : value}
-        </span>
-        {secret && (
-          <button
-            onClick={() => setRevealed((v) => !v)}
-            style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-fg-quaternary)', display: 'flex', padding: 2 }}
-            title={revealed ? 'Hide' : 'Show'}
-          >
-            {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
-        )}
-        <button
-          onClick={copy}
-          style={{ border: 0, background: 'transparent', cursor: 'pointer', color: copied ? 'var(--color-brand-600)' : 'var(--color-fg-quaternary)', display: 'flex', padding: 2 }}
-          title="Copy"
-        >
-          {copied ? '✓' : <Copy01 size={14} />}
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function CredentialDetail({
   entry,
@@ -1085,6 +1141,8 @@ function CredentialDetail({
   onToggleFavorite,
   onMoveToCollection,
   deleteConfirm,
+  template,
+  readOnly,
 }: {
   entry: VaultEntry
   collections: Collection[]
@@ -1094,6 +1152,8 @@ function CredentialDetail({
   onToggleFavorite: (id: string) => void
   onMoveToCollection: (id: string, collectionId: string | null) => void
   deleteConfirm: string | null
+  template?: CredentialTemplate
+  readOnly: boolean
 }) {
   const trashed = !!entry.deletedAt
 
@@ -1109,22 +1169,30 @@ function CredentialDetail({
           gap: 16,
         }}
       >
-        <EntryAvatar entry={entry} size={48} />
+        <EntryAvatar entry={entry} size={48} template={template} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 2px', letterSpacing: '-0.01em' }}>{entry.title}</h2>
+          {ENTRY_TYPES[entry.type].infra && (
+            <div style={{ font: '400 12px/1.5 var(--font-mono)', color: 'var(--color-text-tertiary)' }}>
+              <span className="roko-tag" style={{ marginInlineEnd: 8, padding: '0 8px', fontSize: 10 }}>
+                {template ? template.name : entry.type === 'vpn' ? vpnProtocolMeta(entry.vpnProtocol).label : ENTRY_TYPES[entry.type].label}
+              </span>
+              {entry.type === 'vpn' ? entry.host : entry.type === 'custom' ? '' : infraSubtitle(entry, template)}
+            </div>
+          )}
           {entry.url && (entry.type === 'login' || entry.type === 'passkey') && (
             <a
               href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ fontSize: 13, color: 'var(--color-brand-700)', textDecoration: 'none' }}
+              style={{ fontSize: 13, color: 'var(--color-text-brand-secondary)', textDecoration: 'none' }}
             >
               {entry.url}
             </a>
           )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {!trashed && (
+          {!trashed && !readOnly && (
             <button
               onClick={() => onToggleFavorite(entry.id)}
               title={entry.favorite ? 'Unfavorite' : 'Favorite'}
@@ -1144,7 +1212,9 @@ function CredentialDetail({
               <Star01 size={15} style={entry.favorite ? { fill: 'currentColor' } : undefined} />
             </button>
           )}
-          {trashed ? (
+          {readOnly ? (
+            <span className="roko-tag" style={{ gap: 4, alignSelf: 'center' }}><Eye size={11} /> View only</span>
+          ) : trashed ? (
             <button
               onClick={() => onRestore(entry.id)}
               style={{
@@ -1180,6 +1250,7 @@ function CredentialDetail({
             </button>
           )}
           <button
+            hidden={readOnly}
             onClick={() => onDelete(entry)}
             style={{
               height: 32,
@@ -1219,6 +1290,9 @@ function CredentialDetail({
           </>
         )}
 
+        {ENTRY_TYPES[entry.type].infra && <InfraDetail entry={entry} />}
+        {(entry.templateId || entry.type === 'custom') && <TemplateFieldsView entry={entry} template={template} />}
+
         {entry.type === 'passkey' && (
           <>
             <FieldRow label="Relying party" value={entry.url} />
@@ -1228,7 +1302,7 @@ function CredentialDetail({
 
         {entry.notes && (
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+            <div style={{ font: '500 10px/1.4 var(--font-mono)', color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>
               Notes
             </div>
             <div
@@ -1251,12 +1325,13 @@ function CredentialDetail({
         {/* Collection assignment */}
         {!trashed && (
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+            <div style={{ font: '500 10px/1.4 var(--font-mono)', color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>
               Collection
             </div>
             <select
               value={entry.collectionId ?? ''}
               onChange={(e) => onMoveToCollection(entry.id, e.target.value || null)}
+              disabled={readOnly}
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -1298,206 +1373,167 @@ function CredentialDetail({
 
 // ─── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({
-  settings,
-  onApply,
-  onExport,
-  onSetupRecovery,
-  hasRecovery,
-  error,
-  clearError,
-}: {
-  settings: ReturnType<typeof useVault>['settings']
-  onApply: ReturnType<typeof useVault>['applySettings']
-  onExport: () => Promise<void>
-  onSetupRecovery: () => Promise<void>
-  hasRecovery: boolean
-  error: string | null
-  clearError: () => void
-}) {
-  const { serverSession, logoutServer } = useVault()
-  const [vaultIdInput, setVaultIdInput] = useState(settings.vaultId)
-  const [saved, setSaved] = useState(false)
+function SettingsPanel({ onOpenAdmin }: { onOpenAdmin: () => void }) {
+  const { mode, org, canExport, exportToFile, setupRecovery, hasRecovery, error, clearError, closeOrgVault, orgSignOut } = useVault()
   const [exportLoading, setExportLoading] = useState(false)
+  const [exportPassword, setExportPassword] = useState('')
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [recoveryLoading, setRecoveryLoading] = useState(false)
-  // Reveal the server-connection sub-panel. True whenever the live backend is
-  // already remote, or the user taps "Remote" to start connecting.
-  const [showRemote, setShowRemote] = useState(settings.backend === 'remote')
-  // Show the connect-and-upload flow inside the remote sub-panel.
-  const [uploading, setUploading] = useState(false)
+  const vault = org.activeVault
+  const isOrg = mode === 'org'
 
   const sectionTitle = (label: string) => (
-    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+    <div style={{ font: '500 10px/1.4 var(--font-mono)', color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 10 }}>
       {label}
     </div>
   )
-
-  const save = async () => {
-    await onApply({ backend: settings.backend, vaultId: vaultIdInput })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  const note: React.CSSProperties = { fontSize: 12, color: 'var(--color-text-tertiary)', margin: '0 0 10px', lineHeight: 1.55 }
 
   const handleExport = async () => {
+    setExportMsg(null)
     setExportLoading(true)
-    try { await onExport() } finally { setExportLoading(false) }
+    try {
+      await exportToFile(isOrg ? exportPassword : undefined)
+      setExportPassword('')
+      if (isOrg) setExportMsg({ ok: true, text: 'Downloaded. Open it later with "Open vault from file" and this file password.' })
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        setExportMsg({ ok: false, text: err instanceof Error ? err.message : 'Download failed.' })
+      }
+    } finally {
+      setExportLoading(false)
+    }
   }
 
   const handleSetupRecovery = async () => {
     clearError()
     setRecoveryLoading(true)
-    try { await onSetupRecovery() } finally { setRecoveryLoading(false) }
+    try { await setupRecovery() } finally { setRecoveryLoading(false) }
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Storage */}
+      {/* Where this vault lives */}
       <div>
-        {sectionTitle('Storage backend')}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <Button
-            type="button"
-            onClick={() => {
-              setShowRemote(false)
-              if (settings.backend === 'remote') onApply({ backend: 'local' }).catch(() => {})
-            }}
-            color={!showRemote ? 'primary' : 'secondary'}
-            size="sm"
-            className="flex-1"
-          >
-            💾 Local
-          </Button>
-          <Button
-            type="button"
-            onClick={() => setShowRemote(true)}
-            color={showRemote ? 'primary' : 'secondary'}
-            size="sm"
-            className="flex-1"
-          >
-            ☁️ Remote
-          </Button>
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: 0 }}>
-          {!showRemote
-            ? 'Vault is stored in this browser only.'
-            : 'Encrypted vault blob is synced to the server. The server never sees your passwords.'}
-        </p>
-
-        {showRemote && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 12,
-              borderRadius: 8,
-              border: '1px solid var(--color-border-secondary)',
-              background: 'var(--color-bg-secondary)',
-            }}
-          >
-            {settings.backend === 'remote' ? (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 2 }}>
-                  ☁️ Synced to <span style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{serverSession?.serverUrl ?? settings.serverUrl}</span>
-                </div>
-                {serverSession && (
-                  <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 10 }}>
-                    Signed in as {serverSession.email}
-                  </div>
-                )}
-                <Button type="button" onClick={() => logoutServer()} color="secondary" size="sm">
-                  Disconnect
-                </Button>
-              </>
-            ) : uploading ? (
-              <UploadToServer onClose={() => setUploading(false)} />
-            ) : (
-              <>
-                <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: '0 0 10px' }}>
-                  Upload an encrypted copy of this vault to a sync server so you can reach it from other devices.
-                  {serverSession ? ` Connected to ${serverSession.serverUrl}.` : ''}
-                </p>
-                <Button type="button" onClick={() => { clearError(); setUploading(true) }} color="primary" size="sm">
-                  ⬆ Upload this vault to a sync server
-                </Button>
-              </>
-            )}
+        {sectionTitle(isOrg ? 'Organization vault' : 'Personal vault')}
+        {isOrg && vault ? (
+          <div style={{ padding: 12, borderRadius: 14, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14 }}>
+              <Building07 size={15} color="var(--color-fg-brand-primary)" /> {vault.name}
+            </div>
+            <div style={{ font: '400 12px/1.6 var(--font-mono)', color: 'var(--color-text-tertiary)', margin: '4px 0 10px' }}>
+              {org.session?.email} · {org.session?.serverUrl.replace(/^https?:\/\//, '')}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              <span className="roko-tag" style={{ gap: 4 }}>
+                {vault.canWrite ? <Edit03 size={11} /> : <Eye size={11} />} {vault.canWrite ? 'Can edit' : 'View only'}
+              </span>
+              <span className="roko-tag" style={{ gap: 4 }}>
+                <Download01 size={11} /> {vault.canExport ? 'Download allowed' : 'No download'}
+              </span>
+              {org.me?.role === 'admin' && <span className="roko-tag">Org admin</span>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <Button type="button" color="secondary" size="sm" iconLeading={SwitchHorizontal01} onClick={closeOrgVault}>Switch vault</Button>
+              {org.me?.role === 'admin' && (
+                <Button type="button" color="secondary" size="sm" iconLeading={Settings01} onClick={onOpenAdmin}>Admin console</Button>
+              )}
+              <Button type="button" color="tertiary" size="sm" iconLeading={LogOut01} onClick={() => void orgSignOut()}>Sign out</Button>
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Vault ID */}
-      <div>
-        {sectionTitle('Vault ID')}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={vaultIdInput}
-            onChange={(e) => setVaultIdInput(e.target.value)}
-            placeholder="vault-id"
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: '1px solid var(--color-border-primary)',
-              borderRadius: 6,
-              background: 'var(--color-bg-secondary)',
-              color: 'var(--color-text-primary)',
-              fontFamily: 'monospace',
-              fontSize: 12,
-              outline: 'none',
-            }}
-          />
-          <Button type="button" onClick={save} color="secondary" size="sm">
-            {saved ? '✓ Saved' : 'Save'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Backup */}
-      <div>
-        {sectionTitle('Portable backup')}
-        <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: '0 0 10px' }}>
-          Save a copy of your encrypted vault as a <code>.rkpw</code> file.
-        </p>
-        <Button type="button" onClick={handleExport} isDisabled={exportLoading} isLoading={exportLoading} color="secondary" size="sm">
-          💾 Export vault to file
-        </Button>
-      </div>
-
-      {/* Recovery */}
-      <div>
-        {sectionTitle('Recovery phrase')}
-        <div style={{ marginBottom: 8 }}>
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '2px 8px',
-              borderRadius: 999,
-              fontSize: 11,
-              fontWeight: 500,
-              background: hasRecovery ? 'var(--color-bg-success-primary)' : 'var(--color-bg-warning-primary)',
-              color: hasRecovery ? 'var(--color-fg-success-primary)' : 'var(--color-fg-warning-primary)',
-            }}
-          >
-            {hasRecovery ? '✓ Recovery enabled' : '⚠ No recovery set up'}
-          </span>
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: '0 0 10px' }}>
-          {hasRecovery
-            ? 'Your vault can be recovered using your 12-word phrase.'
-            : 'Without a recovery phrase, a forgotten master password means permanent data loss.'}
-        </p>
-        <Button type="button" onClick={handleSetupRecovery} isDisabled={recoveryLoading} isLoading={recoveryLoading} color="secondary" size="sm">
-          {hasRecovery ? '🔄 Rotate recovery phrase' : '🛡 Set up recovery phrase'}
-        </Button>
-        {error && (
-          <p style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, background: 'var(--color-bg-error-primary)', color: 'var(--color-fg-error-primary)', fontSize: 12 }}>
-            {error}
+        ) : (
+          <p style={note}>
+            Stored encrypted on this device only. To work with your team, lock this vault and choose <strong>Organization</strong> on the sign-in screen.
           </p>
         )}
       </div>
 
-      <div style={{ padding: '10px 12px', background: 'var(--color-bg-secondary)', borderRadius: 8, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-        🔒 All data is encrypted with AES-256-GCM before leaving your device. The master password is never stored.
+      {/* Download */}
+      <div>
+        {sectionTitle(isOrg ? 'Download a copy' : 'Portable backup')}
+        {!canExport ? (
+          <p style={{ ...note, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <Lock01 size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            Your org admin hasn&apos;t allowed downloading this vault.
+          </p>
+        ) : isOrg ? (
+          <>
+            <p style={note}>
+              Saves a standalone encrypted <code>.rkpw</code> file protected by a password you choose now. Your admin can see that you downloaded it.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                value={exportPassword}
+                onChange={(e) => setExportPassword(e.target.value)}
+                placeholder="File password (8+ characters)"
+                autoComplete="new-password"
+                style={{ flex: 1, minWidth: 0, padding: '8px 12px', border: '1px solid var(--color-border-primary)', borderRadius: 10, background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)', fontSize: 13, outline: 'none' }}
+              />
+              <Button type="button" onClick={handleExport} isDisabled={exportLoading || exportPassword.length < 8} isLoading={exportLoading} color="secondary" size="sm" iconLeading={Download01}>
+                Download
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={note}>Save a copy of your encrypted vault as a <code>.rkpw</code> file.</p>
+            <Button type="button" onClick={handleExport} isDisabled={exportLoading} isLoading={exportLoading} color="secondary" size="sm" iconLeading={Download01}>
+              Export vault to file
+            </Button>
+          </>
+        )}
+        {exportMsg && (
+          <p style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10, fontSize: 12, background: exportMsg.ok ? 'var(--color-bg-success-primary)' : 'var(--color-bg-error-primary)', color: exportMsg.ok ? 'var(--color-fg-success-primary)' : 'var(--color-fg-error-primary)' }}>
+            {exportMsg.text}
+          </p>
+        )}
+      </div>
+
+      {/* Recovery (personal vault only: org accounts are recovered through the admin) */}
+      {!isOrg && (
+        <div>
+          {sectionTitle('Recovery phrase')}
+          <div style={{ marginBottom: 8 }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 500,
+                background: hasRecovery ? 'var(--color-bg-success-primary)' : 'var(--color-bg-warning-primary)',
+                color: hasRecovery ? 'var(--color-fg-success-primary)' : 'var(--color-fg-warning-primary)',
+              }}
+            >
+              {hasRecovery ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+              {hasRecovery ? 'Recovery enabled' : 'No recovery set up'}
+            </span>
+          </div>
+          <p style={note}>
+            {hasRecovery
+              ? 'Your vault can be recovered using your 12-word phrase.'
+              : 'Without a recovery phrase, a forgotten master password means permanent data loss.'}
+          </p>
+          <Button type="button" onClick={handleSetupRecovery} isDisabled={recoveryLoading} isLoading={recoveryLoading} color="secondary" size="sm" iconLeading={hasRecovery ? RefreshCw01 : ShieldTick}>
+            {hasRecovery ? 'Rotate recovery phrase' : 'Set up recovery phrase'}
+          </Button>
+        </div>
+      )}
+
+      {error && (
+        <p style={{ margin: 0, padding: '8px 12px', borderRadius: 10, background: 'var(--color-bg-error-primary)', color: 'var(--color-fg-error-primary)', fontSize: 12 }}>
+          {error}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--color-bg-secondary)', borderRadius: 10, fontSize: 11, lineHeight: 1.55, color: 'var(--color-text-tertiary)' }}>
+        <ShieldTick size={14} style={{ flexShrink: 0 }} />
+        {isOrg
+          ? 'Items are encrypted on your device with the vault key before they are sent. The server stores only ciphertext.'
+          : 'All data is encrypted with AES-256-GCM before leaving your device. The master password is never stored.'}
       </div>
     </div>
   )

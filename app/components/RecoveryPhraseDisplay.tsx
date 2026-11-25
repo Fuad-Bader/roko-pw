@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/base/buttons/button'
+import { Check, Copy01, Download01 } from '@untitledui/icons'
 
 interface Props {
   words: string[]
@@ -56,19 +57,30 @@ export function RecoveryPhraseDisplay({ words, onConfirmed }: Props) {
         </p>
       </div>
 
-      {/* Word grid */}
-      <div className="grid grid-cols-3 gap-2">
-        {words.map((word, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 rounded-lg border border-border-primary bg-tertiary px-3 py-2"
-          >
-            <span className="w-5 shrink-0 text-right text-xs font-mono text-quaternary">
-              {i + 1}.
-            </span>
-            <span className="font-mono text-sm font-medium text-primary">{word}</span>
+      {/* Word grid, shown as a Roko terminal */}
+      <div className="roko-terminal" data-selectable>
+        <div className="roko-terminal-bar">
+          <i />
+          <i />
+          <i />
+          <span>recovery-phrase · {words.length} words</span>
+        </div>
+        <div className="roko-terminal-body">
+          <div className="mb-3">
+            <span className="roko-t-prompt">$ </span>
+            <span className="roko-t-cmd">roko recovery --show</span>
           </div>
-        ))}
+          <ol className="m-0 grid list-none grid-cols-3 gap-x-4 gap-y-1 p-0">
+            {words.map((word, i) => (
+              <li key={i} className="flex items-baseline gap-2">
+                <span className="roko-t-dim w-5 shrink-0 text-right text-xs">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <span className="roko-t-hi">{word}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
 
       {/* Action row */}
@@ -79,8 +91,9 @@ export function RecoveryPhraseDisplay({ words, onConfirmed }: Props) {
           color="secondary"
           size="sm"
           className="flex-1"
+          iconLeading={copied ? Check : Copy01}
         >
-          {copied ? '✓ Copied' : '📋 Copy phrase'}
+          {copied ? 'Copied' : 'Copy phrase'}
         </Button>
         <Button
           type="button"
@@ -88,8 +101,9 @@ export function RecoveryPhraseDisplay({ words, onConfirmed }: Props) {
           color="secondary"
           size="sm"
           className="flex-1"
+          iconLeading={Download01}
         >
-          ⬇ Download .txt
+          Download .txt
         </Button>
       </div>
 

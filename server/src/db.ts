@@ -86,8 +86,87 @@ export function initDb(): void {
 
   // ── Migrations for databases created before a column existed ────────────────
   // (CREATE TABLE IF NOT EXISTS won't add columns to an existing table.)
-  const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>
-  if (!userCols.some((col) => col.name === "password_hash")) {
-    db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT")
+  addColumn('users', 'password_hash', 'TEXT')
+  // Org model
+  addColumn('users', 'role', "TEXT NOT NULL DEFAULT 'member'") // 'admin' | 'member'
+  addColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'") // 'active' | 'invited' | 'disabled'
+  // 0 = legacy (server received the raw password), 1 = client sends a derived auth hash
+  addColumn('users', 'kdf', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn('users', 'public_key', 'TEXT') // RSA-OAEP SPKI, base64
+  addColumn('users', 'encrypted_private_key', 'TEXT') // JSON {iv, ciphertext}, encrypted client-side
+  addColumn('users', 'last_login_at', 'INTEGER')
+  // 'legacy' = shared vault-password vault from before the org model, 'org' = per-user keys
+  addColumn('vaults', 'kind', "TEXT NOT NULL DEFAULT 'legacy'")
+  addColumn('vaults', 'revision', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn('vaults', 'created_by', 'TEXT')
+  // The vault key encrypted to this member's public key. NULL on an org vault = access
+  // granted by an admin but not yet usable (the user hasn't created keys yet).
+  addColumn('vault_members', 'wrapped_key', 'TEXT')
+  addColumn('vault_members', 'can_write', 'INTEGER NOT NULL DEFAULT 1')
+  addColumn('vault_members', 'can_export', 'INTEGER NOT NULL DEFAULT 0')
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      at          INTEGER NOT NULL,
+      actor_id    TEXT,
+      actor_email TEXT,
+      action      TEXT NOT NULL,
+      target      TEXT,
+      details     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS audit_log_at ON audit_log(at DESC);
+  `)
+
+  bootstrapAdmins()
+}
+
+function addColumn(table: string, column: string, decl: string) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`)
+}
+
+/** Emails listed in ADMIN_EMAILS (comma-separated) are always org admins. */
+export function configuredAdminEmails(): Set<string> {
+  return new Set(
+    (process.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  )
+}
+
+// Make sure the org has an admin: promote ADMIN_EMAILS, and on an existing server
+// with no admin yet, the earliest account (the person who set the server up).
+function bootstrapAdmins() {
+  const emails = configuredAdminEmails()
+  for (const email of emails) {
+    db.prepare("UPDATE users SET role = 'admin' WHERE email = ?").run(email)
+  }
+  const hasAdmin = db.prepare("SELECT 1 FROM users WHERE role = 'admin' AND status != 'disabled'").get()
+  if (!hasAdmin) {
+    const first = db.prepare('SELECT id, email FROM users ORDER BY created_at ASC LIMIT 1').get() as
+      | { id: string; email: string }
+      | undefined
+    if (first) {
+      db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(first.id)
+      console.log(`No org admin found: promoted the first account (${first.email}) to admin.`)
+    }
+  }
+}
+
+/** Append to the audit log. Never throws: auditing must not break the request. */
+export function audit(
+  actor: { id: string; email: string } | null,
+  action: string,
+  target?: string | null,
+  details?: Record<string, unknown>,
+) {
+  try {
+    db.prepare(
+      'INSERT INTO audit_log (at, actor_id, actor_email, action, target, details) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(Date.now(), actor?.id ?? null, actor?.email ?? null, action, target ?? null, details ? JSON.stringify(details) : null)
+  } catch (err) {
+    console.error('audit failed', err)
   }
 }

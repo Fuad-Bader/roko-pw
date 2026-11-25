@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { VaultEntry } from '@/lib/types'
-import { Eye, EyeOff, Copy01, Pencil01, Trash01 } from '@untitledui/icons'
+import { Eye, EyeOff, Copy01, Check, Pencil01, Trash01 } from '@untitledui/icons'
 
 interface Props {
   entry: VaultEntry
@@ -38,7 +38,7 @@ function CopyBtn({ text, label }: { text: string; label: string }) {
         fontWeight: 600,
       }}
     >
-      {copied ? '✓' : <Copy01 size={13} />}
+      {copied ? <Check size={13} /> : <Copy01 size={13} />}
     </button>
   )
 }
@@ -82,9 +82,9 @@ export function CredentialCard({ entry, onEdit, onDelete }: Props) {
           style={{
             width: 36,
             height: 36,
-            borderRadius: 8,
+            borderRadius: 999,
             background: 'var(--color-bg-brand-solid)',
-            color: '#fff',
+            color: 'var(--color-on-brand)',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -207,7 +207,7 @@ export function CredentialCard({ entry, onEdit, onDelete }: Props) {
             style={{
               flex: 1,
               fontSize: 12,
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: 'var(--font-mono)',
               color: 'var(--color-text-secondary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -237,7 +237,7 @@ export function CredentialCard({ entry, onEdit, onDelete }: Props) {
             style={{
               flex: 1,
               fontSize: 12,
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: 'var(--font-mono)',
               color: 'var(--color-text-secondary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',

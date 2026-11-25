@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { authRoutes } from './routes/auth.js'
 import { vaultRoutes } from './routes/vaults.js'
-import { shareRoutes } from './routes/shares.js'
+import { adminRoutes } from './routes/admin.js'
 import { initDb } from './db.js'
 
 const PORT = parseInt(process.env.PORT ?? '4567')
@@ -30,15 +30,17 @@ app.use('*', logger())
 app.get('/', (c) =>
   c.json({
     name: 'RokoPW Server',
-    version: '0.1.0',
+    version: '0.2.0',
+    // 'org' = per-user keys, admin-managed vaults (clients check this before signing in)
+    mode: 'org',
     // Clients use this to confirm they reached a RokoPW server
     kind: 'roko-pw-server',
   }),
 )
 
 app.route('/api/auth', authRoutes)
-app.route('/api/vaults', vaultRoutes)  // /api/vaults/*
-app.route('/api', shareRoutes)         // /api/vaults/:id/invite + /api/invite/*
+app.route('/api/vaults', vaultRoutes) // member access to vaults
+app.route('/api/admin', adminRoutes) // org admin console
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {
@@ -48,5 +50,5 @@ app.onError((err, c) => {
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`RokoPW server running at http://localhost:${info.port}`)
-  console.log(`Configure SMTP in .env to enable email (login codes + invite notifications).`)
+  console.log('Configure SMTP in .env to send sign-in codes (or MAIL_LOG=true for local development).')
 })

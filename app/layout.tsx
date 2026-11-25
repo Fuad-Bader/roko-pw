@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { VaultProvider } from "./components/VaultProvider";
 import { ThemeProvider } from "./components/ThemeProvider";
@@ -10,8 +10,15 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
+// Roko brand type: Space Grotesk (display), Inter (body), JetBrains Mono (labels/code)
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
 const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
 });
@@ -30,8 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-accent="violet"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-primary text-primary">
         <ThemeProvider>

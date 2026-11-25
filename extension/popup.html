@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Roko</title>
     <style>
+      /* Roko brand fonts, self-hosted (SIL OFL 1.1, see fonts/*-OFL.txt) */
+      @font-face { font-family: 'Inter'; font-weight: 400 700; font-display: swap; src: url(fonts/inter-latin-400-700.woff2) format('woff2'); }
+      @font-face { font-family: 'Space Grotesk'; font-weight: 500 700; font-display: swap; src: url(fonts/space-grotesk-latin-500-700.woff2) format('woff2'); }
+      @font-face { font-family: 'JetBrains Mono'; font-weight: 400 500; font-display: swap; src: url(fonts/jetbrains-mono-latin-400-500.woff2) format('woff2'); }
+
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
 
       body {
@@ -12,9 +17,10 @@
         min-height: 400px;
         max-height: 600px;
         overflow-y: auto;
-        background: #09090b;
-        color: #e4e4e7;
-        font-family: system-ui, -apple-system, sans-serif;
+        background: #0A0D12;
+        color: #F7F5F0;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
         font-size: 13px;
       }
 
@@ -23,23 +29,27 @@
         align-items: center;
         gap: 8px;
         padding: 12px 14px;
-        border-bottom: 1px solid #27272a;
-        background: #18181b;
+        border-bottom: 1px solid rgb(255 255 255 / 0.07);
+        background: #0A0D12;
       }
-      header h1 { font-size: 15px; font-weight: 700; flex: 1 }
-      header span { font-size: 18px }
+      header h1 { font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: -0.03em; flex: 1; color: #F7F5F0 }
+      header h1 small { font: 500 10px/1 'JetBrains Mono', monospace; letter-spacing: 0.04em; color: #FF5A1F; margin-left: 4px; vertical-align: 2px }
+      header svg { display: block; flex: none }
+      h2 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em }
 
       #lock-btn {
         background: none;
         border: none;
         cursor: pointer;
-        color: #71717a;
+        color: #7A8391;
         font-size: 16px;
-        padding: 2px 4px;
-        border-radius: 4px;
+        padding: 6px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
         transition: color 0.15s;
       }
-      #lock-btn:hover { color: #ef4444 }
+      #lock-btn:hover { color: #FF7A45 }
 
       main { padding: 12px 14px }
 
@@ -48,46 +58,46 @@
       #unlock-form input, #create-form input {
         display: block;
         width: 100%;
-        background: #27272a;
-        border: 1px solid #3f3f46;
+        background: #171B22;
+        border: 1px solid #252B35;
         border-radius: 8px;
-        color: #e4e4e7;
+        color: #F7F5F0;
         padding: 8px 10px;
         font-size: 13px;
         outline: none;
         margin-bottom: 8px;
         transition: border-color 0.15s;
       }
-      #unlock-form input:focus, #create-form input:focus { border-color: #6366f1 }
+      #unlock-form input:focus, #create-form input:focus { border-color: #FF5A1F }
 
       /* ── Buttons ── */
       .btn-primary {
         width: 100%;
-        background: #4f46e5;
-        color: #fff;
+        background: #FF5A1F;
+        color: #0A0D12;
         border: none;
-        border-radius: 8px;
-        padding: 8px;
+        border-radius: 999px;
+        padding: 9px;
         font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         transition: background 0.15s;
         margin-top: 4px;
       }
-      .btn-primary:hover { background: #4338ca }
+      .btn-primary:hover { background: #FF7A45 }
       .btn-primary:disabled { opacity: 0.5; cursor: default }
 
       .btn-ghost {
         background: none;
-        border: 1px solid #3f3f46;
-        color: #a1a1aa;
-        border-radius: 8px;
-        padding: 6px 12px;
+        border: 1px solid #252B35;
+        color: #A3ABB8;
+        border-radius: 999px;
+        padding: 6px 14px;
         font-size: 12px;
         cursor: pointer;
         transition: background 0.15s;
       }
-      .btn-ghost:hover { background: #27272a; color: #e4e4e7 }
+      .btn-ghost:hover { background: #171B22; color: #F7F5F0 }
 
       /* ── Error ── */
       .error {
@@ -102,85 +112,95 @@
       /* ── Toggle mode ── */
       #toggle-mode {
         display: block;
+        margin-inline: auto;
         text-align: center;
         margin-top: 10px;
         font-size: 11px;
-        color: #52525b;
+        color: #5B6472;
         background: none;
         border: none;
         cursor: pointer;
         text-decoration: underline;
         text-underline-offset: 2px;
       }
-      #toggle-mode:hover { color: #a1a1aa }
+      #toggle-mode:hover { color: #A3ABB8 }
 
       /* ── Vault list ── */
       #vault-screen h2 {
-        font-size: 11px;
-        font-weight: 500;
-        color: #71717a;
-        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font: 500 10px/1 'JetBrains Mono', monospace;
+        color: #FF7A45;
+        margin-bottom: 10px;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.12em;
       }
+      #vault-screen h2::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: #FF5A1F }
 
       #search-input {
         display: block;
         width: 100%;
-        background: #27272a;
-        border: 1px solid #3f3f46;
+        background: #171B22;
+        border: 1px solid #252B35;
         border-radius: 8px;
-        color: #e4e4e7;
+        color: #F7F5F0;
         padding: 7px 10px;
         font-size: 12px;
         outline: none;
         margin-bottom: 10px;
         transition: border-color 0.15s;
       }
-      #search-input:focus { border-color: #6366f1 }
+      #search-input:focus { border-color: #FF5A1F }
 
       .entry-card {
-        background: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 10px;
+        background: #0E1116;
+        border: 1px solid #171B22;
+        border-radius: 14px;
         padding: 10px 12px;
         margin-bottom: 8px;
         position: relative;
       }
       .entry-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-      .entry-username { color: #71717a; font-size: 11px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+      .entry-username { color: #7A8391; font-size: 11px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
       .entry-actions { display: flex; gap: 4px; margin-top: 7px }
       .entry-actions button {
         flex: 1;
-        background: #27272a;
+        background: #171B22;
         border: none;
-        color: #a1a1aa;
-        border-radius: 6px;
+        color: #A3ABB8;
+        border-radius: 999px;
         padding: 5px;
         font-size: 11px;
         cursor: pointer;
         transition: background 0.15s, color 0.15s;
       }
-      .entry-actions button:hover { background: #3f3f46; color: #e4e4e7 }
-      .entry-actions .fill-btn:hover { background: #312e81; color: #c7d2fe }
+      .entry-actions button:hover { background: #252B35; color: #F7F5F0 }
+      .entry-actions .del-btn { flex: 0 0 34px; display: grid; place-items: center }
+      .entry-actions .del-btn:hover { color: #FF7A45 }
+      .entry-actions .fill-btn:hover { background: #421205; color: #FFC4A8 }
 
       #add-btn {
         display: block;
         width: 100%;
         background: none;
-        border: 1px dashed #3f3f46;
-        color: #52525b;
-        border-radius: 10px;
+        border: 1px dashed #252B35;
+        color: #7A8391;
+        border-radius: 14px;
         padding: 10px;
         font-size: 12px;
         cursor: pointer;
         margin-top: 4px;
         transition: border-color 0.15s, color 0.15s;
       }
-      #add-btn:hover { border-color: #6366f1; color: #818cf8 }
+      #add-btn:hover { border-color: #FF5A1F; color: #FF7A45 }
 
-      #empty-state { text-align: center; padding: 30px 0; color: #52525b }
-      #empty-state .icon { font-size: 32px; margin-bottom: 8px }
+      #empty-state { text-align: center; padding: 30px 0; color: #5B6472 }
+      #empty-state .icon { font: 400 13px/1.6 'JetBrains Mono', monospace; color: #A3ABB8; margin-bottom: 8px }
+      #empty-state .icon b { color: #FF5A1F; font-weight: 500 }
+      .cursor { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: -0.2em; background: #FF5A1F; border-radius: 1.5px; animation: blink 1.1s steps(1) infinite }
+      @keyframes blink { 50% { opacity: 0 } }
+      @media (prefers-reduced-motion: reduce) { .cursor { animation: none } }
 
       /* ── Add entry panel ── */
       #add-panel { display: none }
@@ -188,17 +208,17 @@
       #add-panel input {
         display: block;
         width: 100%;
-        background: #27272a;
-        border: 1px solid #3f3f46;
+        background: #171B22;
+        border: 1px solid #252B35;
         border-radius: 8px;
-        color: #e4e4e7;
+        color: #F7F5F0;
         padding: 7px 10px;
         font-size: 12px;
         outline: none;
         margin-bottom: 6px;
         transition: border-color 0.15s;
       }
-      #add-panel input:focus { border-color: #6366f1 }
+      #add-panel input:focus { border-color: #FF5A1F }
       .form-row { display: flex; gap: 6px; margin-top: 4px }
 
       /* ── Copied toast ── */
@@ -208,7 +228,7 @@
         bottom: 12px;
         left: 50%;
         transform: translateX(-50%);
-        background: #16a34a;
+        background: #0B857A;
         color: #fff;
         padding: 6px 14px;
         border-radius: 20px;
@@ -219,8 +239,8 @@
       /* ── Spinner ── */
       .spinner {
         width: 20px; height: 20px;
-        border: 2px solid #3f3f46;
-        border-top-color: #6366f1;
+        border: 2px solid #252B35;
+        border-top-color: #FF5A1F;
         border-radius: 50%;
         animation: spin 0.7s linear infinite;
         margin: 40px auto;
@@ -230,9 +250,9 @@
   </head>
   <body>
     <header>
-      <span>🔐</span>
-      <h1>Roko</h1>
-      <button id="lock-btn" title="Lock vault" style="display:none">🔒</button>
+      <svg width="24" height="24" viewBox="0 0 64 64" role="img" aria-label="Roko"><rect width="64" height="64" rx="16" fill="#F7F5F0"/><path d="M20 43V33a12 12 0 0 1 12-12h2" fill="none" stroke-width="8" stroke-linecap="round" stroke="#0E1116"/><rect x="39" y="37" width="10" height="10" rx="1.5" fill="#FF5A1F"/></svg>
+      <h1>Roko<small>PW</small></h1>
+      <button id="lock-btn" title="Lock vault" aria-label="Lock vault" style="display:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
     </header>
 
     <main>
@@ -265,7 +285,7 @@
         <h2 id="list-heading">All credentials</h2>
         <div id="entries-list"></div>
         <div id="empty-state" style="display:none">
-          <div class="icon">🔑</div>
+          <div class="icon"><b>$</b> roko list <span class="cursor"></span></div>
           <p>No credentials yet</p>
         </div>
         <button id="add-btn" type="button">+ Add credential</button>

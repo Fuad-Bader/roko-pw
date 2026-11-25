@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RokoMark } from '@components/RokoLogo'
 
 const api = () => (window as any).electronAPI?.window
 
@@ -54,8 +55,9 @@ export function TitleBar() {
       className="flex h-10 w-full shrink-0 select-none items-center justify-between bg-secondary pl-4 pr-1 [-webkit-app-region:drag]"
     >
       {/* App name */}
-      <span className="text-xs font-semibold tracking-wide text-quaternary">
-        Roko<span className="text-brand-400">PW</span>
+      <span className="flex items-center gap-2 font-display text-xs font-semibold tracking-wide text-tertiary">
+        <RokoMark size={16} />
+        Roko<span className="-ml-1.5 font-mono text-[10px] text-brand-500">PW</span>
       </span>
 
       {/* Window controls */}

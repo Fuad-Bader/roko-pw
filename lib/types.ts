@@ -1,5 +1,49 @@
 /** The kind of item an entry represents. Drives which fields/forms are shown. */
-export type EntryType = 'login' | 'card' | 'note' | 'passkey'
+export type EntryType = 'login' | 'card' | 'note' | 'passkey' | 'ssh' | 'rdp' | 'vpn' | 'custom'
+
+/** Infrastructure item types (developer / enterprise access). */
+export const INFRA_TYPES: readonly EntryType[] = ['ssh', 'rdp', 'vpn']
+
+// ─── Credential templates ─────────────────────────────────────────────────────
+
+/** How a template field is entered and displayed. */
+export type FieldKind = 'text' | 'secret' | 'multiline' | 'secretMultiline' | 'url' | 'email' | 'number'
+
+export interface TemplateField {
+  /** Stable key into `VaultEntry.fields`; never changes when the label is renamed. */
+  id: string
+  label: string
+  kind: FieldKind
+  required: boolean
+  placeholder?: string
+}
+
+/** A template's icon: from the built-in SVG library, an emoji, or an uploaded SVG. */
+export type TemplateIcon =
+  | { kind: 'library'; name: string }
+  | { kind: 'emoji'; value: string }
+  | { kind: 'svg'; dataUrl: string }
+
+/** Built-in item types a template can extend. 'custom' = a template built from scratch. */
+export type TemplateBase = 'ssh' | 'rdp' | 'vpn' | 'custom'
+
+export interface CredentialTemplate {
+  id: string
+  name: string
+  icon: TemplateIcon
+  /** For ssh/rdp/vpn the built-in fields and actions are kept and `fields` are added after them. */
+  base: TemplateBase
+  /** Extra fields (all fields, for base 'custom'). */
+  fields: TemplateField[]
+  createdAt: number
+  updatedAt: number
+}
+
+/** How an SSH entry authenticates. */
+export type SshAuth = 'key' | 'password'
+
+/** VPN protocol, used to label the entry and name downloaded config files. */
+export type VpnProtocol = 'wireguard' | 'openvpn' | 'ipsec' | 'l2tp' | 'other'
 
 export interface VaultEntry {
   id: string
@@ -20,6 +64,37 @@ export interface VaultEntry {
   cardholder?: string
   expiry?: string // MM/YY
   cvv?: string
+  // ── Infrastructure (type === 'ssh' | 'rdp' | 'vpn') ──
+  // `username` and `password` above are reused for these types.
+  /** Hostname or IP. For VPN, the server / endpoint. */
+  host?: string
+  /** Kept as a string so an empty field means "protocol default" (22 / 3389). */
+  port?: string
+  // SSH
+  sshAuth?: SshAuth
+  /** OpenSSH or PEM private key text. */
+  privateKey?: string
+  /** OpenSSH public key line, e.g. "ssh-ed25519 AAAA… comment". */
+  publicKey?: string
+  /** Passphrase that unlocks `privateKey`, if it is encrypted. */
+  passphrase?: string
+  /** Bastion / jump host in ssh -J form, e.g. "admin@bastion.example.com:22". */
+  jumpHost?: string
+  // RDP
+  domain?: string
+  /** Remote Desktop Gateway hostname. */
+  gateway?: string
+  // VPN
+  vpnProtocol?: VpnProtocol
+  /** IPsec / L2TP pre-shared key. */
+  preSharedKey?: string
+  /** Full client config file (WireGuard .conf, OpenVPN .ovpn, …). */
+  config?: string
+  // ── Templates ──
+  /** Custom template this entry was created from (absent for plain built-in items). */
+  templateId?: string
+  /** Values of the template's fields, keyed by TemplateField.id. */
+  fields?: Record<string, string>
   createdAt: number
   updatedAt: number
 }
@@ -27,7 +102,11 @@ export interface VaultEntry {
 /** The editable fields a form produces — identity/metadata are managed by the provider. */
 export type EntryDraft = Pick<
   VaultEntry,
-  'type' | 'title' | 'url' | 'username' | 'password' | 'notes' | 'cardNumber' | 'cardholder' | 'expiry' | 'cvv'
+  | 'type' | 'title' | 'url' | 'username' | 'password' | 'notes'
+  | 'cardNumber' | 'cardholder' | 'expiry' | 'cvv'
+  | 'host' | 'port' | 'sshAuth' | 'privateKey' | 'publicKey' | 'passphrase' | 'jumpHost'
+  | 'domain' | 'gateway' | 'vpnProtocol' | 'preSharedKey' | 'config'
+  | 'templateId' | 'fields'
 >
 
 /** A user-defined folder that entries can be organised into. */
@@ -41,6 +120,8 @@ export interface Collection {
 export interface VaultData {
   entries: VaultEntry[]
   collections: Collection[]
+  /** User-defined credential templates (built-in ones are not stored). */
+  templates: CredentialTemplate[]
 }
 
 /** Recovery blob: the raw vault key wrapped with a key derived from the recovery phrase. */

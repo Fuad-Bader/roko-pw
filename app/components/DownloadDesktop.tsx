@@ -73,7 +73,7 @@ export function DownloadDesktop() {
           gap: 8,
           height: 48,
           padding: '0 20px',
-          borderRadius: 8,
+          borderRadius: 999,
           background: 'var(--color-bg-secondary)',
           color: 'var(--color-text-tertiary)',
           fontSize: 16,
@@ -100,16 +100,14 @@ export function DownloadDesktop() {
           gap: 8,
           height: 48,
           padding: '0 20px',
-          borderRadius: 8,
+          borderRadius: 999,
           background: 'var(--color-bg-brand-solid)',
-          color: '#fff',
+          color: 'var(--color-on-brand)',
           fontSize: 16,
           fontWeight: 600,
           textDecoration: 'none',
           opacity: primary ? 1 : 0.6,
           pointerEvents: primary ? 'auto' : 'none',
-          boxShadow:
-            '0 1px 2px 0 rgba(16,24,40,.05), inset 0 -2px 0 rgba(16,24,40,.05), inset 0 0 0 1px rgba(16,24,40,.18)',
         }}
       >
         <Download01 size={18} />
@@ -117,7 +115,7 @@ export function DownloadDesktop() {
       </a>
 
       {primary && (
-        <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+        <span style={{ font: '400 12px/1.5 var(--font-mono)', color: 'var(--color-text-tertiary)' }}>
           {manifest?.version ? `v${manifest.version} · ` : ''}
           {formatSize(primary.size)}
           {!matchesOS && os !== 'other' ? ` · ${OS_LABEL[primary.os]} build` : ''}
@@ -132,7 +130,7 @@ export function DownloadDesktop() {
               key={a.os}
               href={a.url}
               download
-              style={{ color: 'var(--color-bg-brand-solid)', textDecoration: 'none', fontWeight: 500 }}
+              style={{ color: 'var(--color-text-brand-secondary)', textDecoration: 'none', fontWeight: 500 }}
             >
               {OS_LABEL[a.os]}
             </a>

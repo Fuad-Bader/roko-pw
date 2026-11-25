@@ -28,7 +28,8 @@
     btn.type = 'button'
     btn.id = BUTTON_ID
     btn.title = 'Roko: autofill password'
-    btn.textContent = '🔐'
+    // Roko mark (inline SVG) instead of an emoji.
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0E1116"/><path d="M20 43V33a12 12 0 0 1 12-12h2" fill="none" stroke-width="8" stroke-linecap="round" stroke="#F7F5F0"/><rect x="39" y="37" width="10" height="10" rx="1.5" fill="#FF5A1F"/></svg>'
     btn.style.cssText = [
       'position:absolute',
       'right:6px',
@@ -37,8 +38,9 @@
       'background:none',
       'border:none',
       'cursor:pointer',
-      'font-size:14px',
-      'line-height:1',
+      'padding:0',
+      'display:flex',
+      'line-height:0',
       'z-index:9999',
       'opacity:0.7',
       'transition:opacity 0.15s',
@@ -63,7 +65,7 @@
     })
 
     if (response.error) {
-      showToast(response.error === 'Vault is locked.' ? '🔒 Unlock Roko first' : response.error, 'error')
+      showToast(response.error === 'Vault is locked.' ? 'Unlock Roko first' : response.error, 'error')
       return
     }
 
@@ -120,9 +122,9 @@
       `top:${rect.bottom + window.scrollY + 4}px`,
       `left:${rect.left + window.scrollX}px`,
       `z-index:2147483647`,
-      `background:#18181b`,
-      `border:1px solid #3f3f46`,
-      `border-radius:10px`,
+      `background:#0E1116`,
+      `border:1px solid #252B35`,
+      `border-radius:14px`,
       `box-shadow:0 8px 32px rgba(0,0,0,0.5)`,
       `padding:8px`,
       `min-width:240px`,
@@ -131,8 +133,8 @@
     ].join(';')
 
     const header = document.createElement('p')
-    header.textContent = '🔐 Choose credential'
-    header.style.cssText = 'color:#71717a;margin:0 0 6px 0;font-size:11px;font-weight:500'
+    header.textContent = 'Roko · choose credential'
+    header.style.cssText = 'color:#FF7A45;margin:2px 4px 8px;font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0.12em;text-transform:uppercase'
     picker.appendChild(header)
 
     for (const entry of entries) {
@@ -146,11 +148,11 @@
         'border:none',
         'cursor:pointer',
         'padding:7px 10px',
-        'border-radius:6px',
-        'color:#e4e4e7',
+        'border-radius:10px',
+        'color:#F7F5F0',
       ].join(';')
-      btn.innerHTML = `<strong>${escapeHtml(entry.title)}</strong><br><span style="color:#71717a">${escapeHtml(entry.username)}</span>`
-      btn.addEventListener('mouseenter', () => { btn.style.background = '#27272a' })
+      btn.innerHTML = `<strong>${escapeHtml(entry.title)}</strong><br><span style="color:#7A8391">${escapeHtml(entry.username)}</span>`
+      btn.addEventListener('mouseenter', () => { btn.style.background = '#171B22' })
       btn.addEventListener('mouseleave', () => { btn.style.background = 'none' })
       btn.addEventListener('click', () => {
         fillForm(pwField, entry)
@@ -174,7 +176,8 @@
     const existing = document.getElementById('roko-toast')
     if (existing) existing.remove()
 
-    const colors = { success: '#16a34a', error: '#dc2626', info: '#4f46e5' }
+    // Roko palette: circuit for success, ink for info (white on ember fails contrast)
+    const colors = { success: '#0B857A', error: '#dc2626', info: '#0E1116' }
     const toast = document.createElement('div')
     toast.id = 'roko-toast'
     toast.textContent = message
@@ -186,7 +189,8 @@
       `background:${colors[type] ?? colors.info}`,
       'color:#fff',
       'padding:10px 16px',
-      'border-radius:8px',
+      'border-radius:999px',
+      'border-left:3px solid #FF5A1F',
       'font-family:system-ui,sans-serif',
       'font-size:13px',
       'font-weight:500',

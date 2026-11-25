@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { useVault, VaultProvider } from '@components/VaultProvider'
 import { UnlockScreen } from '@components/UnlockScreen'
 import { VaultDashboard } from '@components/VaultDashboard'
+import { AdminConsole } from '@components/AdminConsole'
 import { TitleBar } from './components/TitleBar'
 
 function VaultApp() {
-  const { status } = useVault()
+  const { status, org } = useVault()
+  const [adminOpen, setAdminOpen] = useState(false)
 
   if (status === 'checking') {
     return (
@@ -14,8 +17,9 @@ function VaultApp() {
     )
   }
 
-  if (status === 'unlocked') return <VaultDashboard />
-  return <UnlockScreen />
+  if (adminOpen && org.privateKey && org.me?.role === 'admin') return <AdminConsole onClose={() => setAdminOpen(false)} />
+  if (status === 'unlocked') return <VaultDashboard onOpenAdmin={() => setAdminOpen(true)} />
+  return <UnlockScreen onOpenAdmin={() => setAdminOpen(true)} />
 }
 
 export function App() {

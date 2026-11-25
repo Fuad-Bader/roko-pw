@@ -74,10 +74,12 @@ async function saveEncryptedVault(vault) {
 
 // The decrypted payload is `{ entries, collections }`. Older vaults stored a
 // bare entries array — accept both so the extension and web app interoperate.
+// Any other keys (e.g. `templates` from the web app) are kept as-is so a write
+// from the extension never drops data it doesn't know about.
 function parseVaultData(plaintext) {
   const raw = JSON.parse(plaintext)
   if (Array.isArray(raw)) return { entries: raw, collections: [] }
-  return { entries: raw.entries ?? [], collections: raw.collections ?? [] }
+  return { ...raw, entries: raw.entries ?? [], collections: raw.collections ?? [] }
 }
 
 async function readVaultData(key, vault) {
@@ -88,7 +90,7 @@ async function readVaultData(key, vault) {
 // Write entries + collections back, preserving the recovery blob if present so
 // we don't wipe a recovery phrase set up in the web app.
 async function writeVaultData(key, salt, data, existingVault) {
-  const payload = { entries: data.entries ?? [], collections: data.collections ?? [] }
+  const payload = { ...data, entries: data.entries ?? [], collections: data.collections ?? [] }
   const { iv, ciphertext } = await encryptData(key, JSON.stringify(payload))
   const blob = { version: 1, salt, iv, ciphertext }
   if (existingVault?.recovery) blob.recovery = existingVault.recovery
@@ -361,8 +363,8 @@ function onIsUvpaaRequest(info) {
 // Nudge the user to unlock when a passkey request arrives on a locked vault.
 function hintUnlock() {
   try {
-    chrome.action.setBadgeText({ text: '🔒' })
-    chrome.action.setBadgeBackgroundColor({ color: '#7c3aed' })
+    chrome.action.setBadgeText({ text: '!' })
+    chrome.action.setBadgeBackgroundColor({ color: '#FF5A1F' })
   } catch {
     /* ignore */
   }

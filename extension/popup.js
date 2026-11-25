@@ -46,6 +46,8 @@ function showError(id, text) {
 
 // ─── Entry rendering ──────────────────────────────────────────────────────────
 
+const TRASH_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>'
+
 let allEntries = []
 let currentTabUrl = ''
 
@@ -83,10 +85,10 @@ async function renderPasskeys() {
     const card = document.createElement('div')
     card.className = 'entry-card'
     card.innerHTML = `
-      <div class="entry-title">🔐 ${escapeHtml(pk.rpId)}</div>
+      <div class="entry-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:6px;color:#FF5A1F"><path d="M12 11v4M8.5 7.5A5 5 0 0 1 17 11v2M7 11a5 5 0 0 0 .5 2.2M12 3a8 8 0 0 1 8 8v1M4 15a8 8 0 0 1 0-4 8 8 0 0 1 3-5.6M9 21a12 12 0 0 1-1-5M15 21a12 12 0 0 0 1.5-5"/></svg>${escapeHtml(pk.rpId)}</div>
       <div class="entry-username">${escapeHtml(label)}</div>
       <div class="entry-actions">
-        <button class="pk-del-btn" data-id="${escapeHtml(pk.credentialId)}">🗑 Remove passkey</button>
+        <button class="pk-del-btn" data-id="${escapeHtml(pk.credentialId)}">Remove passkey</button>
       </div>
     `
     list.appendChild(card)
@@ -100,8 +102,8 @@ async function renderPasskeys() {
       await renderPasskeys()
     } else {
       btn.dataset.confirmed = '1'
-      btn.textContent = '✓ Confirm remove'
-      setTimeout(() => { delete btn.dataset.confirmed; btn.textContent = '🗑 Remove passkey' }, 2500)
+      btn.textContent = 'Confirm remove'
+      setTimeout(() => { delete btn.dataset.confirmed; btn.textContent = 'Remove passkey' }, 2500)
     }
   }
 }
@@ -133,7 +135,7 @@ function renderEntries(entries, isFiltered) {
         <button class="fill-btn" data-id="${entry.id}">Fill ↗</button>
         <button class="copy-user-btn" data-username="${escapeHtml(entry.username)}">Copy user</button>
         <button class="copy-pass-btn" data-password="${escapeHtml(entry.password)}">Copy pwd</button>
-        <button class="del-btn" data-id="${entry.id}">🗑</button>
+        <button class="del-btn" data-id="${entry.id}" title="Delete" aria-label="Delete">${TRASH_ICON}</button>
       </div>
     `
     list.appendChild(card)
@@ -163,8 +165,8 @@ function renderEntries(entries, isFiltered) {
         await loadAndRender()
       } else {
         btn.dataset.confirmed = '1'
-        btn.textContent = '✓?'
-        setTimeout(() => { delete btn.dataset.confirmed; btn.textContent = '🗑' }, 2500)
+        btn.textContent = 'Sure?'
+        setTimeout(() => { delete btn.dataset.confirmed; btn.innerHTML = TRASH_ICON }, 2500)
       }
     }
   }

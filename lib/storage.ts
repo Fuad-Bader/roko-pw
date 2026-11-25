@@ -1,4 +1,4 @@
-import type { EncryptedVault, StorageBackend, VaultMeta } from './types'
+import type { EncryptedVault } from './types'
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
 
@@ -43,143 +43,20 @@ async function idbDelete(key: string): Promise<void> {
   })
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Public API (local vault on this device) ──────────────────────────────────
+// Org vaults are never stored on the device; see lib/orgApi.ts.
+// The desktop app replaces this module with an IPC-backed one of the same shape.
 
-export interface RemoteConfig {
-  serverUrl: string  // e.g. "https://vault.example.com"
-  token: string      // bearer token from server session
+/** Load the encrypted personal vault from IndexedDB. */
+export async function loadVault(): Promise<EncryptedVault | null> {
+  return (await idbGet('vault')) as EncryptedVault | null
 }
 
-/** Load the encrypted vault blob from local IndexedDB or the remote server. */
-export async function loadVault(
-  backend: StorageBackend,
-  vaultId: string,
-  remote?: RemoteConfig,
-): Promise<EncryptedVault | null> {
-  if (backend === 'local') {
-    return (await idbGet('vault')) as EncryptedVault | null
-  }
-  const base = remote?.serverUrl ?? ''
-  const res = await fetch(`${base}/api/vaults/${encodeURIComponent(vaultId)}`, {
-    headers: remote ? { Authorization: `Bearer ${remote.token}` } : {},
-  })
-  if (!res.ok) return null
-  return (await res.json()) as EncryptedVault | null
+/** Persist the encrypted personal vault to IndexedDB. */
+export async function saveVault(vault: EncryptedVault): Promise<void> {
+  await idbSet('vault', vault)
 }
 
-/** Persist the encrypted vault blob to local IndexedDB or the remote server. */
-export async function saveVault(
-  backend: StorageBackend,
-  vaultId: string,
-  vault: EncryptedVault,
-  remote?: RemoteConfig,
-): Promise<void> {
-  if (backend === 'local') {
-    await idbSet('vault', vault)
-    return
-  }
-  const base = remote?.serverUrl ?? ''
-  const res = await fetch(`${base}/api/vaults/${encodeURIComponent(vaultId)}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(remote ? { Authorization: `Bearer ${remote.token}` } : {}),
-    },
-    body: JSON.stringify(vault),
-  })
-  if (!res.ok) throw new Error('Failed to save vault to remote server')
-}
-
-// ─── Server-specific helpers ─────────────────────────────────────────────────
-
-/** Fetch the list of vaults the authenticated user has on a server. */
-export async function listServerVaults(remote: RemoteConfig): Promise<VaultMeta[]> {
-  const res = await fetch(`${remote.serverUrl}/api/vaults`, {
-    headers: { Authorization: `Bearer ${remote.token}` },
-  })
-  if (!res.ok) throw new Error('Failed to list vaults')
-  return (await res.json()) as VaultMeta[]
-}
-
-/** Create a new vault on the server and return its metadata. */
-export async function createServerVault(remote: RemoteConfig, name: string): Promise<VaultMeta> {
-  const res = await fetch(`${remote.serverUrl}/api/vaults`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remote.token}` },
-    body: JSON.stringify({ name }),
-  })
-  if (!res.ok) throw new Error('Failed to create vault')
-  return (await res.json()) as VaultMeta
-}
-
-/** Check that a URL points to a live RokoPW server. Returns the server's display name. */
-export async function probeServer(url: string): Promise<string> {
-  const res = await fetch(`${url.replace(/\/$/, '')}/`, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) throw new Error(`Server returned ${res.status}`)
-  const body = await res.json() as { kind?: string; name?: string }
-  if (body.kind !== 'roko-pw-server') throw new Error('URL does not point to a RokoPW server')
-  return body.name ?? 'RokoPW Server'
-}
-
-/**
- * Step 1 of sign-in: submit email + password. On success the server emails a
- * one-time code and returns `{ otpRequired: true }`. `newAccount` is true when
- * this email has no account yet (or hasn't set a password) — the caller should
- * then treat the entered password as the new account password.
- */
-export async function loginServer(
-  serverUrl: string,
-  email: string,
-  password: string,
-): Promise<{ otpRequired: boolean; newAccount: boolean }> {
-  const res = await fetch(`${serverUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-  const body = (await res.json()) as {
-    otpRequired?: boolean
-    newAccount?: boolean
-    error?: string
-  }
-  if (!res.ok) throw new Error(body.error ?? 'Sign-in failed')
-  return { otpRequired: !!body.otpRequired, newAccount: !!body.newAccount }
-}
-
-/** Step 2 of sign-in: verify the OTP (with the password) and get a session token. */
-export async function verifyServerOtp(
-  serverUrl: string,
-  email: string,
-  otp: string,
-  password: string,
-): Promise<{ token: string; expiresAt: number }> {
-  const res = await fetch(`${serverUrl}/api/auth/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, otp, password }),
-  })
-  const body = await res.json() as { token?: string; expiresAt?: number; error?: string }
-  if (!res.ok) throw new Error(body.error ?? 'Invalid or expired code')
-  return { token: body.token!, expiresAt: body.expiresAt! }
-}
-
-/** Invite another user to a vault. The vault password is sent in the email. */
-export async function inviteToVault(
-  remote: RemoteConfig,
-  vaultId: string,
-  email: string,
-  vaultPassword: string,
-): Promise<void> {
-  const res = await fetch(`${remote.serverUrl}/api/vaults/${vaultId}/invite`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remote.token}` },
-    body: JSON.stringify({ email, vaultPassword }),
-  })
-  const body = await res.json() as { error?: string }
-  if (!res.ok) throw new Error(body.error ?? 'Failed to send invite')
-}
-
-/** Delete the local vault from IndexedDB. */
 export async function deleteLocalVault(): Promise<void> {
   await idbDelete('vault')
 }

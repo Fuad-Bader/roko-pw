@@ -4,7 +4,7 @@ import type { EncryptedVault } from '@/lib/types'
 /**
  * In-memory vault store for demo / development.
  *
- * ⚠️  Data is lost on server restart.  For production, replace this Map with
+ * Warning: data is lost on server restart.  For production, replace this Map with
  *     a real database (Postgres, Redis, etc.).  The server only ever stores the
  *     *encrypted* blob — it never has access to plaintext passwords.
  */

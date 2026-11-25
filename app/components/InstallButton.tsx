@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { PuzzlePiece01, XClose } from '@untitledui/icons'
 import { Button } from '@/components/base/buttons/button'
 import { ModalOverlay, Modal, Dialog } from '@/components/application/modals/modal'
 
@@ -95,7 +96,7 @@ const BROWSER_META: Record<Browser, { label: string; icon: React.ReactNode; chro
   },
   other: {
     label: 'Install Extension',
-    icon: <span>🧩</span>,
+    icon: <PuzzlePiece01 className="size-[18px]" aria-hidden />,
     chromium: false,
   },
 }
@@ -130,14 +131,14 @@ function InstallModal({ browser, onClose }: { browser: Browser; onClose: () => v
           className="text-tertiary transition hover:text-primary"
           aria-label="Close"
         >
-          ✕
+          <XClose className="size-5" />
         </button>
       </div>
 
       <ol className="space-y-3">
         {steps.map((step, i) => (
           <li key={i} className="flex gap-3">
-            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-solid text-xs font-bold text-white">
+            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-solid text-xs font-bold text-on-brand">
               {i + 1}
             </span>
             <p className="text-sm leading-relaxed text-tertiary">{step}</p>
@@ -170,9 +171,9 @@ export function InstallButton({ size = 'lg' }: Props) {
         type="button"
         onClick={() => setOpen(true)}
         color="primary"
-        size={size === 'lg' ? 'md' : 'sm'}
+        size={size === 'lg' ? 'lg' : 'sm'}
+        iconLeading={meta.icon}
       >
-        {meta.icon}
         {meta.label}
       </Button>
 

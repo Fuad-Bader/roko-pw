@@ -1,220 +1,253 @@
-import { Hono, type Context } from "hono";
-import { db } from "../db.js";
-import { sendOtpEmail } from "../email.js";
-import {
-  requireAuth,
-  sha256,
-  randomHex,
-  hashPassword,
-  verifyPassword,
-} from "../middleware/auth.js";
+import { Hono, type Context } from 'hono'
+import { db, audit, configuredAdminEmails } from '../db.js'
+import { sendOtpEmail } from '../email.js'
+import { requireAuth, sha256, randomHex, hashPassword, verifyPassword, type AuthUser } from '../middleware/auth.js'
+import { isB64 } from '../types.js'
 
-const OTP_TTL_MS = parseInt(process.env.OTP_TTL_MINUTES ?? "15") * 60 * 1000;
-const SESSION_TTL_MS =
-  parseInt(process.env.SESSION_TTL_DAYS ?? "30") * 86400 * 1000;
+const OTP_TTL_MS = parseInt(process.env.OTP_TTL_MINUTES ?? '15') * 60 * 1000
+const SESSION_TTL_MS = parseInt(process.env.SESSION_TTL_DAYS ?? '30') * 86400 * 1000
 // Max OTP requests per email per 15-minute window
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-// Minimum account password length (enforced server-side too).
-const MIN_PASSWORD = 8;
+const RATE_LIMIT = 5
+const RATE_WINDOW_MS = 15 * 60 * 1000
 
-// Whether brand-new emails (no account, no pending invite) may enroll
-// themselves. Set ALLOW_SIGNUPS=false in the server's .env to run an
-// invite-only server — existing users and invited emails can still sign in.
-const ALLOW_SIGNUPS =
-  (process.env.ALLOW_SIGNUPS ?? "true").trim().toLowerCase() !== "false";
+// Org servers are invite-only by default: an admin adds people from the admin
+// console. Set ALLOW_SIGNUPS=true to let any email create an account. The very
+// first account on an empty server can always sign up (and becomes the admin).
+const ALLOW_SIGNUPS = (process.env.ALLOW_SIGNUPS ?? 'false').trim().toLowerCase() === 'true'
 
-// An email may authenticate if signups are open, or it is already known to
-// the server: it has an account, or a pending (unexpired) invite.
-function mayAuthenticate(email: string): boolean {
-  if (ALLOW_SIGNUPS) return true;
-  const existing = db.prepare("SELECT 1 FROM users WHERE email = ?").get(email);
-  if (existing) return true;
-  const invited = db
-    .prepare(
-      "SELECT 1 FROM vault_invites WHERE invited_email = ? AND accepted = 0 AND expires_at > ?",
-    )
-    .get(email, Date.now());
-  return !!invited;
+/**
+ * Clients never send the account password. They derive a key from it locally
+ * (PBKDF2, 600k rounds) and send `authHash`, a one-round hash of that key. The
+ * server stores scrypt(authHash). Accounts created before this (kdf = 0) stored
+ * scrypt(password); they upgrade once by also sending `legacyPassword`.
+ */
+const AUTH_HASH = /^[A-Za-z0-9+/]{43}=$/
+
+type UserRow = {
+  id: string
+  email: string
+  password_hash: string | null
+  kdf: number
+  status: string
+  role: string
 }
 
-const INVITE_ONLY_ERROR =
-  "This server is invite-only. Ask an admin to invite you.";
+function getUser(email: string): UserRow | undefined {
+  return db
+    .prepare('SELECT id, email, password_hash, kdf, status, role FROM users WHERE email = ?')
+    .get(email) as UserRow | undefined
+}
 
-export const authRoutes = new Hono();
+function userCount(): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n
+}
 
-// Generate, store and email a fresh OTP for `email`. Returns an error response
-// (rate-limit / SMTP failure) or null on success. Applies per-email rate limit.
+// An email may authenticate if it already has an (enabled) account, the server
+// accepts signups, or the server has no accounts yet.
+function mayAuthenticate(email: string): boolean {
+  const user = getUser(email)
+  if (user) return user.status !== 'disabled'
+  return ALLOW_SIGNUPS || userCount() === 0
+}
+
+const INVITE_ONLY_ERROR = 'This server is invite-only. Ask your org admin to add you.'
+const DISABLED_ERROR = 'This account has been disabled. Contact your org admin.'
+
+export const authRoutes = new Hono<{ Variables: { user: AuthUser } }>()
+
 async function issueOtp(c: Context, email: string): Promise<Response | null> {
-  const now = Date.now();
-  const rate = db
-    .prepare("SELECT count, window_start FROM otp_rate WHERE email = ?")
-    .get(email) as { count: number; window_start: number } | undefined;
+  const now = Date.now()
+  const rate = db.prepare('SELECT count, window_start FROM otp_rate WHERE email = ?').get(email) as
+    | { count: number; window_start: number }
+    | undefined
 
   if (rate && now - rate.window_start < RATE_WINDOW_MS) {
     if (rate.count >= RATE_LIMIT) {
-      return c.json(
-        { error: "Too many login attempts. Try again in 15 minutes." },
-        429,
-      );
+      return c.json({ error: 'Too many sign-in attempts. Try again in 15 minutes.' }, 429)
     }
-    db.prepare("UPDATE otp_rate SET count = count + 1 WHERE email = ?").run(email);
+    db.prepare('UPDATE otp_rate SET count = count + 1 WHERE email = ?').run(email)
   } else {
-    db.prepare(
-      "INSERT OR REPLACE INTO otp_rate (email, count, window_start) VALUES (?, 1, ?)",
-    ).run(email, now);
+    db.prepare('INSERT OR REPLACE INTO otp_rate (email, count, window_start) VALUES (?, 1, ?)').run(email, now)
   }
 
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const otpHash = await sha256(otp);
-  const id = randomHex(16);
+  // crypto.getRandomValues, not Math.random: codes must be unpredictable.
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 900000
+  const otp = String(100000 + n)
   db.prepare(
-    "INSERT INTO auth_requests (id, email, otp_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-  ).run(id, email, otpHash, now, now + OTP_TTL_MS);
+    'INSERT INTO auth_requests (id, email, otp_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(randomHex(16), email, await sha256(otp), now, now + OTP_TTL_MS)
 
   try {
-    await sendOtpEmail(email, otp);
+    await sendOtpEmail(email, otp)
   } catch (err) {
-    console.error("Failed to send OTP email:", err);
-    return c.json(
-      { error: "Failed to send email. Check server SMTP configuration." },
-      500,
-    );
+    console.error('Failed to send OTP email:', err)
+    return c.json({ error: 'Failed to send email. Check the server SMTP configuration.' }, 500)
   }
-  return null;
+  return null
 }
 
-// ── POST /api/auth/login  ─────────────────────────────────────────────────────
-// Step 1 of sign-in: verify email + password, then email a one-time code.
-// Establishing a new session always requires email verification, so a valid
-// password is answered with `{ otpRequired: true }` rather than a session.
-authRoutes.post("/login", async (c) => {
-  const body = await c.req
-    .json<{ email?: string; password?: string }>()
-    .catch(() => ({ email: undefined, password: undefined }));
-  const email = (body.email ?? "").trim().toLowerCase();
-  const password = body.password ?? "";
-  if (!email || !email.includes("@"))
-    return c.json({ error: "Invalid email" }, 400);
-  if (!password) return c.json({ error: "Password required" }, 400);
+type Credentials = { email: string; authHash: string; legacyPassword: string; otp: string }
+type CredBody = { email?: string; authHash?: string; legacyPassword?: string; otp?: string }
 
-  // Enrollment policy: don't send a code to an email that can't sign in.
-  if (!mayAuthenticate(email))
-    return c.json({ error: INVITE_ONLY_ERROR }, 403);
+async function readCredentials(c: Context): Promise<Credentials | Response> {
+  const body = await c.req.json<CredBody>().catch(() => ({}) as CredBody)
+  const email = (body.email ?? '').trim().toLowerCase()
+  if (!email || !email.includes('@') || email.length > 254) return c.json({ error: 'Invalid email' }, 400)
+  const authHash = body.authHash ?? ''
+  if (!AUTH_HASH.test(authHash)) return c.json({ error: 'Invalid credentials format. Update your RokoPW app.' }, 400)
+  return { email, authHash, legacyPassword: body.legacyPassword ?? '', otp: (body.otp ?? '').trim() }
+}
 
-  const user = db
-    .prepare("SELECT id, password_hash FROM users WHERE email = ?")
-    .get(email) as { id: string; password_hash: string | null } | undefined;
+/**
+ * Check the password proof for an existing account. Returns an error response,
+ * or null when it matches. Legacy accounts need `legacyPassword` once.
+ */
+async function checkPassword(c: Context, user: UserRow, cred: Credentials): Promise<Response | null> {
+  if (!user.password_hash) return null // invited: chooses a password now
+  if (user.kdf >= 1) {
+    return (await verifyPassword(cred.authHash, user.password_hash))
+      ? null
+      : c.json({ error: 'Invalid email or password.' }, 401)
+  }
+  if (!cred.legacyPassword) {
+    return c.json({ error: 'This account needs a one-time security upgrade.', code: 'legacy_password' }, 409)
+  }
+  return (await verifyPassword(cred.legacyPassword, user.password_hash))
+    ? null
+    : c.json({ error: 'Invalid email or password.' }, 401)
+}
 
-  // A brand-new account, or a legacy account that never set a password, will
-  // set its password after the email is verified.
-  let newAccount = false;
-  if (!user || !user.password_hash) {
-    if (password.length < MIN_PASSWORD)
-      return c.json(
-        { error: `Password must be at least ${MIN_PASSWORD} characters.` },
-        400,
-      );
-    newAccount = true;
-  } else {
-    if (!(await verifyPassword(password, user.password_hash)))
-      return c.json({ error: "Invalid email or password." }, 401);
+function blocked(c: Context, email: string): Response | null {
+  if (mayAuthenticate(email)) return null
+  return c.json({ error: getUser(email)?.status === 'disabled' ? DISABLED_ERROR : INVITE_ONLY_ERROR }, 403)
+}
+
+// ── POST /api/auth/login ──────────────────────────────────────────────────────
+// Step 1: check the password proof, then email a one-time code.
+authRoutes.post('/login', async (c) => {
+  const cred = await readCredentials(c)
+  if (cred instanceof Response) return cred
+  const denied = blocked(c, cred.email)
+  if (denied) return denied
+
+  const user = getUser(cred.email)
+  const newAccount = !user || !user.password_hash
+  if (user) {
+    const err = await checkPassword(c, user, cred)
+    if (err) return err
   }
 
-  const otpError = await issueOtp(c, email);
-  if (otpError) return otpError;
+  const otpError = await issueOtp(c, cred.email)
+  if (otpError) return otpError
+  return c.json({ otpRequired: true, newAccount })
+})
 
-  return c.json({ otpRequired: true, newAccount });
-});
+// ── POST /api/auth/verify ─────────────────────────────────────────────────────
+// Step 2: verify the code (and the password proof again), then issue a session.
+authRoutes.post('/verify', async (c) => {
+  const cred = await readCredentials(c)
+  if (cred instanceof Response) return cred
+  if (!/^\d{6}$/.test(cred.otp)) return c.json({ error: 'Enter the 6-digit code.' }, 400)
 
-// ── POST /api/auth/verify  ────────────────────────────────────────────────────
-// Step 2 of sign-in: verify the OTP (and password again), then issue a session.
-// For new accounts this also creates the account with the given password.
-authRoutes.post("/verify", async (c) => {
-  const body = await c.req
-    .json<{ email?: string; otp?: string; password?: string }>()
-    .catch(() => ({ email: undefined, otp: undefined, password: undefined }));
-  const email = (body.email ?? "").trim().toLowerCase();
-  const otp = (body.otp ?? "").trim();
-  const password = body.password ?? "";
-  if (!email || !otp) return c.json({ error: "Email and OTP required" }, 400);
-  if (!password) return c.json({ error: "Password required" }, 400);
-
-  const otpHash = await sha256(otp);
-  const now = Date.now();
-
+  const now = Date.now()
   const req = db
     .prepare(
       `SELECT id FROM auth_requests
        WHERE email = ? AND otp_hash = ? AND expires_at > ? AND used = 0
        ORDER BY created_at DESC LIMIT 1`,
     )
-    .get(email, otpHash, now) as { id: string } | undefined;
+    .get(cred.email, await sha256(cred.otp), now) as { id: string } | undefined
+  if (!req) return c.json({ error: 'Invalid or expired code.' }, 401)
 
-  if (!req) return c.json({ error: "Invalid or expired code." }, 401);
+  const denied = blocked(c, cred.email)
+  if (denied) return denied
 
-  // Enforce enrollment policy again at verify time (defense in depth — the
-  // policy or invites may have changed since the code was requested).
-  if (!mayAuthenticate(email))
-    return c.json({ error: INVITE_ONLY_ERROR }, 403);
-
-  // Resolve the user, creating or setting the password as needed.
-  const user = db
-    .prepare("SELECT id, password_hash FROM users WHERE email = ?")
-    .get(email) as { id: string; password_hash: string | null } | undefined;
-
-  let userId: string;
+  const user = getUser(cred.email)
+  let userId: string
+  let isNew = false
   if (!user) {
-    if (password.length < MIN_PASSWORD)
-      return c.json(
-        { error: `Password must be at least ${MIN_PASSWORD} characters.` },
-        400,
-      );
-    userId = randomHex(16);
+    // The first account on the server, or an email in ADMIN_EMAILS, is an admin.
+    const role = userCount() === 0 || configuredAdminEmails().has(cred.email) ? 'admin' : 'member'
+    userId = randomHex(16)
     db.prepare(
-      "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
-    ).run(userId, email, await hashPassword(password), now);
-  } else if (!user.password_hash) {
-    if (password.length < MIN_PASSWORD)
-      return c.json(
-        { error: `Password must be at least ${MIN_PASSWORD} characters.` },
-        400,
-      );
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(
-      await hashPassword(password),
-      user.id,
-    );
-    userId = user.id;
+      "INSERT INTO users (id, email, password_hash, kdf, role, status, created_at) VALUES (?, ?, ?, 1, ?, 'active', ?)",
+    ).run(userId, cred.email, await hashPassword(cred.authHash), role, now)
+    isNew = true
   } else {
-    if (!(await verifyPassword(password, user.password_hash)))
-      return c.json({ error: "Invalid email or password." }, 401);
-    userId = user.id;
+    const err = await checkPassword(c, user, cred)
+    if (err) return err
+    if (!user.password_hash || user.kdf < 1) {
+      // Invited account choosing its password, or a legacy account upgrading.
+      db.prepare("UPDATE users SET password_hash = ?, kdf = 1, status = 'active' WHERE id = ?").run(
+        await hashPassword(cred.authHash),
+        user.id,
+      )
+    }
+    userId = user.id
   }
 
-  // Mark the code used only once we're committed to issuing a session.
-  db.prepare("UPDATE auth_requests SET used = 1 WHERE id = ?").run(req.id);
+  db.prepare('UPDATE auth_requests SET used = 1 WHERE id = ?').run(req.id)
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(now, userId)
 
-  // Create session
-  const token = randomHex(32);
-  const tokenHash = await sha256(token);
-  const sessionId = randomHex(16);
-  db.prepare(
-    "INSERT INTO sessions (id, token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-  ).run(sessionId, tokenHash, userId, now, now + SESSION_TTL_MS);
+  const token = randomHex(32)
+  db.prepare('INSERT INTO sessions (id, token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)').run(
+    randomHex(16),
+    await sha256(token),
+    userId,
+    now,
+    now + SESSION_TTL_MS,
+  )
+  audit({ id: userId, email: cred.email }, isNew ? 'account.created' : 'auth.sign_in')
+  return c.json({ token, expiresAt: now + SESSION_TTL_MS })
+})
 
-  return c.json({ token, expiresAt: now + SESSION_TTL_MS });
-});
+// ── GET /api/auth/me ──────────────────────────────────────────────────────────
+// Profile plus this user's key pair (the private key is encrypted client-side).
+authRoutes.get('/me', requireAuth, (c) => {
+  const row = db
+    .prepare('SELECT id, email, name, role, status, public_key, encrypted_private_key FROM users WHERE id = ?')
+    .get(c.get('user').id) as {
+    id: string
+    email: string
+    name: string | null
+    role: string
+    status: string
+    public_key: string | null
+    encrypted_private_key: string | null
+  }
+  return c.json({
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    role: row.role,
+    status: row.status,
+    publicKey: row.public_key,
+    encryptedPrivateKey: row.encrypted_private_key ? JSON.parse(row.encrypted_private_key) : null,
+  })
+})
 
-// ── GET /api/auth/me  ─────────────────────────────────────────────────────────
-authRoutes.get("/me", requireAuth, (c) => {
-  return c.json(c.get("user"));
-});
+// ── PUT /api/auth/keys ────────────────────────────────────────────────────────
+// Store this user's key pair. Only allowed once: replacing a public key would
+// break every vault already shared with it.
+type KeysBody = { publicKey?: string; encryptedPrivateKey?: { iv?: string; ciphertext?: string } }
+authRoutes.put('/keys', requireAuth, async (c) => {
+  const user = c.get('user')
+  const body = await c.req.json<KeysBody>().catch(() => ({}) as KeysBody)
+  const epk = body.encryptedPrivateKey
+  if (!isB64(body.publicKey, 2048) || !epk || !isB64(epk.iv, 64) || !isB64(epk.ciphertext, 8192)) {
+    return c.json({ error: 'Invalid key payload' }, 400)
+  }
+  const res = db
+    .prepare('UPDATE users SET public_key = ?, encrypted_private_key = ? WHERE id = ? AND public_key IS NULL')
+    .run(body.publicKey, JSON.stringify({ iv: epk.iv, ciphertext: epk.ciphertext }), user.id)
+  if (res.changes === 0) return c.json({ error: 'Keys are already set up for this account.' }, 409)
+  audit(user, 'account.keys_created')
+  return c.json({ ok: true })
+})
 
-// ── DELETE /api/auth/session  ─────────────────────────────────────────────────
-authRoutes.delete("/session", requireAuth, async (c) => {
-  const header = c.req.header("Authorization") ?? "";
-  const token = header.slice(7);
-  const tokenHash = await sha256(token);
-  db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
-  return c.json({ ok: true });
-});
+// ── DELETE /api/auth/session ──────────────────────────────────────────────────
+authRoutes.delete('/session', requireAuth, async (c) => {
+  const token = (c.req.header('Authorization') ?? '').slice(7)
+  db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(await sha256(token))
+  return c.json({ ok: true })
+})

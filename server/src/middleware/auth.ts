@@ -13,6 +13,7 @@ export interface AuthUser {
   id: string
   email: string
   name: string | null
+  role: 'admin' | 'member'
 }
 
 // Attach to Hono context variables
@@ -28,16 +29,22 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
 
   const row = db
     .prepare(
-      `SELECT s.user_id, u.email, u.name
+      `SELECT s.user_id, u.email, u.name, u.role
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > ?`,
+       WHERE s.token_hash = ? AND s.expires_at > ? AND u.status != 'disabled'`,
     )
-    .get(tokenHash, now) as { user_id: string; email: string; name: string | null } | undefined
+    .get(tokenHash, now) as { user_id: string; email: string; name: string | null; role: string } | undefined
 
   if (!row) return c.json({ error: 'Unauthorized' }, 401)
 
-  c.set('user', { id: row.user_id, email: row.email, name: row.name })
+  c.set('user', { id: row.user_id, email: row.email, name: row.name, role: row.role === 'admin' ? 'admin' : 'member' })
+  await next()
+})
+
+/** Use after requireAuth: only org admins may continue. */
+export const requireAdmin = createMiddleware<Env>(async (c, next) => {
+  if (c.get('user')?.role !== 'admin') return c.json({ error: 'Admins only' }, 403)
   await next()
 })
 

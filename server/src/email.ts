@@ -1,6 +1,11 @@
 import nodemailer from 'nodemailer'
 
+// MAIL_LOG=true prints emails to the server console instead of sending them.
+// For local development and tests only: login codes appear in the log.
+const MAIL_LOG = (process.env.MAIL_LOG ?? '').trim().toLowerCase() === 'true'
+
 function transport() {
+  if (MAIL_LOG) return nodemailer.createTransport({ jsonTransport: true })
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST ?? 'localhost',
     port: parseInt(process.env.SMTP_PORT ?? '587'),
@@ -14,90 +19,60 @@ function transport() {
 const FROM = process.env.SMTP_FROM ?? 'RokoPW <noreply@localhost>'
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? 'http://localhost:4567').replace(/\/$/, '')
 
+async function send(message: { to: string; subject: string; text: string; html: string }) {
+  const info = await transport().sendMail({ from: FROM, ...message })
+  if (MAIL_LOG) {
+    console.log(`[mail] to=${message.to} subject=${JSON.stringify(message.subject)}\n${message.text}\n[/mail]`)
+  }
+  return info
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+}
+
+// Roko brand: ink #0E1116, paper #F7F5F0, ember #FF5A1F.
+function layout(title: string, body: string): string {
+  return `
+    <div style="font-family:Inter,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0E1116">
+      <p style="font:500 11px/1 monospace;letter-spacing:.12em;text-transform:uppercase;color:#C2390A;margin:0 0 12px">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#FF5A1F;margin-right:6px"></span>RokoPW
+      </p>
+      <h2 style="margin:0 0 16px;font-size:22px">${title}</h2>
+      ${body}
+      <p style="color:#5B6472;font-size:12px;margin-top:24px">Server: <a style="color:#C2390A" href="${esc(PUBLIC_URL)}">${esc(PUBLIC_URL)}</a></p>
+    </div>`
+}
+
 export async function sendOtpEmail(email: string, otp: string): Promise<void> {
-  await transport().sendMail({
-    from: FROM,
+  const minutes = process.env.OTP_TTL_MINUTES ?? 15
+  await send({
     to: email,
-    subject: 'Your RokoPW login code',
-    text: `Your login code is: ${otp}\n\nThis code expires in ${process.env.OTP_TTL_MINUTES ?? 15} minutes.\nIf you did not request this, you can ignore this email.`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#4f46e5">RokoPW Login</h2>
-        <p>Your one-time login code is:</p>
-        <div style="font-size:2.5rem;font-weight:700;letter-spacing:.25rem;color:#1e1b4b;background:#eef2ff;padding:1rem 1.5rem;border-radius:.5rem;display:inline-block">
-          ${otp}
-        </div>
-        <p style="color:#6b7280;font-size:.875rem">
-          Expires in ${process.env.OTP_TTL_MINUTES ?? 15} minutes. If you did not request this, you can safely ignore it.
-        </p>
-      </div>`,
+    subject: 'Your RokoPW sign-in code',
+    text: `Your sign-in code is: ${otp}\n\nThis code expires in ${minutes} minutes.\nIf you did not request this, you can ignore this email.`,
+    html: layout(
+      'Your sign-in code',
+      `<div style="font:700 32px/1 monospace;letter-spacing:.25em;background:#0E1116;color:#F7F5F0;padding:16px 22px;border-radius:14px;display:inline-block">${esc(otp)}</div>
+       <p style="color:#5B6472;font-size:14px">Expires in ${esc(String(minutes))} minutes. If you did not request this, you can ignore it.</p>`,
+    ),
   })
 }
 
-export async function sendInviteEmail(
-  toEmail: string,
-  inviterEmail: string,
-  vaultName: string,
-  inviteToken: string,
-  vaultPassword: string,
-): Promise<void> {
-  const acceptUrl = `${PUBLIC_URL}/invite/${inviteToken}`
-  await transport().sendMail({
-    from: FROM,
+export async function sendUserAddedEmail(toEmail: string, adminEmail: string): Promise<void> {
+  await send({
     to: toEmail,
-    subject: `${inviterEmail} shared a vault with you on RokoPW`,
+    subject: 'You have been added to RokoPW',
     text: [
-      `${inviterEmail} has invited you to access the vault "${vaultName}".`,
+      `${adminEmail} added you to the RokoPW server at ${PUBLIC_URL}.`,
       '',
-      `Server:        ${PUBLIC_URL}`,
-      `Vault password: ${vaultPassword}`,
-      '',
-      `Accept the invitation: ${acceptUrl}`,
-      '',
-      'You will need the vault password above to decrypt and access this vault.',
-      'Keep it somewhere safe — the server never stores it.',
+      'Open RokoPW, choose "Sign in to your organization", enter this server address and your email,',
+      'and choose a password. Your password never leaves your device.',
     ].join('\n'),
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2 style="color:#4f46e5">RokoPW — Vault Invitation</h2>
-        <p><strong>${inviterEmail}</strong> has invited you to access the vault <strong>"${vaultName}"</strong>.</p>
-        <table style="border-collapse:collapse;width:100%;margin:1rem 0">
-          <tr>
-            <td style="padding:.5rem;color:#6b7280;font-size:.875rem">Server</td>
-            <td style="padding:.5rem;font-family:monospace">${PUBLIC_URL}</td>
-          </tr>
-          <tr style="background:#fafafa">
-            <td style="padding:.5rem;color:#6b7280;font-size:.875rem">Vault password</td>
-            <td style="padding:.5rem;font-family:monospace;font-size:1.1rem;font-weight:700;color:#1e1b4b">${vaultPassword}</td>
-          </tr>
-        </table>
-        <a href="${acceptUrl}" style="display:inline-block;background:#4f46e5;color:white;padding:.75rem 1.5rem;border-radius:.5rem;text-decoration:none;font-weight:600">
-          Accept Invitation
-        </a>
-        <p style="color:#6b7280;font-size:.75rem;margin-top:1.5rem">
-          You will need the vault password above when you open RokoPW and connect to this vault.
-          The server never stores it — keep it safe.
-        </p>
-      </div>`,
-  })
-}
-
-export async function sendInviteAcceptedEmail(
-  toEmail: string,
-  acceptedByEmail: string,
-  vaultName: string,
-): Promise<void> {
-  await transport().sendMail({
-    from: FROM,
-    to: toEmail,
-    subject: `${acceptedByEmail} joined your vault on RokoPW`,
-    text: `${acceptedByEmail} has accepted your invitation and now has access to "${vaultName}".`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#4f46e5">RokoPW — Invite Accepted</h2>
-        <p><strong>${acceptedByEmail}</strong> has accepted your invitation and now has access to the vault <strong>"${vaultName}"</strong>.</p>
-        <p style="color:#6b7280;font-size:.875rem">Log in to <a href="${PUBLIC_URL}">${PUBLIC_URL}</a> to manage vault members.</p>
-      </div>`,
+    html: layout(
+      'You have been added to RokoPW',
+      `<p><strong>${esc(adminEmail)}</strong> added you to your organization's RokoPW server.</p>
+       <p>Open RokoPW, choose <strong>Sign in to your organization</strong>, enter the server address below and this email, then choose a password. Your password never leaves your device.</p>`,
+    ),
   })
 }
 
@@ -107,16 +82,13 @@ export async function sendVaultWriteNotification(
   vaultName: string,
 ): Promise<void> {
   if (toEmails.length === 0) return
-  await transport().sendMail({
-    from: FROM,
+  await send({
     to: toEmails.join(', '),
     subject: `"${vaultName}" was updated by ${writerEmail}`,
-    text: `${writerEmail} saved changes to the shared vault "${vaultName}" on your RokoPW server.`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#4f46e5">RokoPW — Vault Updated</h2>
-        <p><strong>${writerEmail}</strong> saved changes to the shared vault <strong>"${vaultName}"</strong>.</p>
-        <p style="color:#6b7280;font-size:.875rem">Server: <a href="${PUBLIC_URL}">${PUBLIC_URL}</a></p>
-      </div>`,
+    text: `${writerEmail} saved changes to the vault "${vaultName}" on your RokoPW server.`,
+    html: layout(
+      'Vault updated',
+      `<p><strong>${esc(writerEmail)}</strong> saved changes to the vault <strong>${esc(vaultName)}</strong>.</p>`,
+    ),
   })
 }
