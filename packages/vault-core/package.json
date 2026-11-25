@@ -1,0 +1,15 @@
+{
+  "name": "@roko/vault-core",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Vault logic and screens shared by the vault web app, admin console and desktop app: crypto, org API client, templates, provider and dashboard",
+  "type": "module",
+  "dependencies": {
+    "@roko/ui": "*",
+    "@untitledui/icons": "^0.0.22"
+  },
+  "peerDependencies": {
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}

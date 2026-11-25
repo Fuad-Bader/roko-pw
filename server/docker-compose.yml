@@ -1,6 +1,9 @@
 services:
   roko-server:
-    build: .
+    build:
+      # The image also contains the admin console, which lives in apps/admin.
+      context: ..
+      dockerfile: server/Dockerfile
     ports:
       - "4567:4567"
     volumes:

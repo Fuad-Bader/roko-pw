@@ -10,8 +10,13 @@ on people's own devices.
 ```bash
 cp .env.example .env      # then set PUBLIC_URL, SMTP_* and ADMIN_EMAILS
 npm install
-npm run dev               # or: docker compose up -d
+npm run dev               # API at http://localhost:4567
+# or, from this folder: docker compose up -d --build   (image also contains the admin console)
 ```
+
+The admin console (`apps/admin`) is served at `/admin`. The Docker image builds
+and includes it; when running from source, build it first with
+`npm run build:admin` in the repository root (or set `ADMIN_DIR`).
 
 The first account created becomes the org admin (or anyone listed in
 `ADMIN_EMAILS`). After that the server is invite-only unless

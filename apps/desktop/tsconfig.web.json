@@ -1,0 +1,31 @@
+{
+  "include": [
+    "src/renderer/src/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@roko/vault-core/lib/storage": [
+        "./src/renderer/src/lib/storage.ts"
+      ],
+      "@roko/vault-core/*": [
+        "../../packages/vault-core/src/*"
+      ],
+      "@roko/ui/*": [
+        "../../packages/ui/src/*"
+      ]
+    }
+  }
+}

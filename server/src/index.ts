@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth.js'
 import { vaultRoutes } from './routes/vaults.js'
 import { adminRoutes } from './routes/admin.js'
 import { initDb } from './db.js'
+import { mountAdminUi } from './adminUi.js'
 
 const PORT = parseInt(process.env.PORT ?? '4567')
 
@@ -40,7 +41,8 @@ app.get('/', (c) =>
 
 app.route('/api/auth', authRoutes)
 app.route('/api/vaults', vaultRoutes) // member access to vaults
-app.route('/api/admin', adminRoutes) // org admin console
+app.route('/api/admin', adminRoutes) // org admin API
+mountAdminUi(app) // org admin console UI (apps/admin) at /admin
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {

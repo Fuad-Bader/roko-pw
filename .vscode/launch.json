@@ -1,25 +1,41 @@
 {
   "version": "0.2.0",
   "configurations": [
-    // ── Next.js web app ────────────────────────────────────────────────────────
+    // ── Landing site (apps/landing, Next.js) ──────────────────────────────────
     {
-      "name": "Next.js: dev server",
+      "name": "Landing: dev server",
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/node_modules/.bin/next",
-      "args": ["dev"],
-      "cwd": "${workspaceFolder}",
+      "args": ["dev", "-p", "3000"],
+      "cwd": "${workspaceFolder}/apps/landing",
       "env": { "NODE_ENV": "development" },
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
     },
     {
-      "name": "Next.js: attach to running dev server",
+      "name": "Landing: attach to running dev server",
       "type": "chrome",
       "request": "attach",
       "port": 9222,
       "urlFilter": "http://localhost:3000/*",
-      "webRoot": "${workspaceFolder}"
+      "webRoot": "${workspaceFolder}/apps/landing"
+    },
+
+    // ── Vault and admin apps (Vite) ────────────────────────────────────────────
+    {
+      "name": "Vault app: dev server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev:vault",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Admin console: dev server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev:admin",
+      "cwd": "${workspaceFolder}"
     },
 
     // ── Hono server ────────────────────────────────────────────────────────────
@@ -60,18 +76,18 @@
       "name": "Electron: main process",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "${workspaceFolder}/desktop/node_modules/.bin/electron",
+      "runtimeExecutable": "${workspaceFolder}/apps/desktop/node_modules/.bin/electron",
       "runtimeArgs": [
         "--inspect=9229",
-        "${workspaceFolder}/desktop/out/main/index.js"
+        "${workspaceFolder}/apps/desktop/out/main/index.js"
       ],
-      "cwd": "${workspaceFolder}/desktop",
+      "cwd": "${workspaceFolder}/apps/desktop",
       "env": { "ELECTRON_RUN_AS_NODE": "" },
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],
-      "outFiles": ["${workspaceFolder}/desktop/out/**/*.js"],
+      "outFiles": ["${workspaceFolder}/apps/desktop/out/**/*.js"],
       "resolveSourceMapLocations": [
-        "${workspaceFolder}/desktop/**",
+        "${workspaceFolder}/apps/desktop/**",
         "!**/node_modules/**"
       ]
     },
@@ -81,18 +97,18 @@
       "request": "attach",
       "port": 9222,
       "urlFilter": "http://localhost:5173/*",
-      "webRoot": "${workspaceFolder}/desktop/src/renderer/src",
+      "webRoot": "${workspaceFolder}/apps/desktop/src/renderer/src",
       "sourceMapPathOverrides": {
         "/@fs/*": "*",
-        "/src/*": "${workspaceFolder}/desktop/src/renderer/src/*"
+        "/src/*": "${workspaceFolder}/apps/desktop/src/renderer/src/*"
       }
     }
   ],
 
   "compounds": [
     {
-      "name": "Full stack: Next.js + Server",
-      "configurations": ["Next.js: dev server", "Server: dev (tsx watch)"],
+      "name": "Full stack: vault + admin + server",
+      "configurations": ["Vault app: dev server", "Admin console: dev server", "Server: dev (tsx watch)"],
       "stopAll": true
     },
     {

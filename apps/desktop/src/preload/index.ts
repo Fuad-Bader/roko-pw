@@ -1,0 +1,23 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import type { EncryptedVault } from '@roko/vault-core/lib/types'
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  loadVault: (): Promise<EncryptedVault | null> =>
+    ipcRenderer.invoke('vault:load'),
+
+  saveVault: (vault: EncryptedVault): Promise<void> =>
+    ipcRenderer.invoke('vault:save', vault),
+
+  exportVault: (vault: EncryptedVault): Promise<boolean> =>
+    ipcRenderer.invoke('vault:export', vault),
+
+  importVault: (): Promise<EncryptedVault | null> =>
+    ipcRenderer.invoke('vault:import'),
+
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+  },
+})

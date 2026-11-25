@@ -1,0 +1,24 @@
+@import "../../../../../packages/ui/src/styles/globals.css";
+@import "../../../../../packages/ui/src/styles/fonts.css";
+
+@source "../../../../../packages";
+@source "./**/*.tsx";
+@source "./**/*.ts";
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent text selection on UI chrome */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Re-enable text selection for inputs and content areas */
+input,
+textarea,
+[data-selectable] {
+  -webkit-user-select: text;
+  user-select: text;
+}

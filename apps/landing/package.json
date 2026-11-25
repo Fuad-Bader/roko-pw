@@ -1,0 +1,24 @@
+{
+  "name": "@roko/landing",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Marketing site. Builds to static files in out/.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@roko/ui": "*",
+    "@untitledui/icons": "^0.0.22",
+    "next": "16.2.2",
+    "react": "19.2.4",
+    "react-aria-components": "^1.17.0",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "postcss": "^8.5.14",
+    "tailwindcss": "^4"
+  }
+}
