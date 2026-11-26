@@ -21,7 +21,7 @@ node_modules/
 /build
 /apps/vault/dist/
 /apps/admin/dist/
-/server/dist/
+/apps/server/dist/
 
 # desktop app build output
 /apps/desktop/dist

@@ -49,14 +49,14 @@
         "tsx/esm",
         "--inspect"
       ],
-      "program": "${workspaceFolder}/server/src/index.ts",
-      "cwd": "${workspaceFolder}/server",
-      "envFile": "${workspaceFolder}/server/.env.example",
+      "program": "${workspaceFolder}/apps/server/src/index.ts",
+      "cwd": "${workspaceFolder}/apps/server",
+      "envFile": "${workspaceFolder}/apps/server/.env.example",
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],
-      "outFiles": ["${workspaceFolder}/server/dist/**/*.js"],
+      "outFiles": ["${workspaceFolder}/apps/server/dist/**/*.js"],
       "resolveSourceMapLocations": [
-        "${workspaceFolder}/server/**",
+        "${workspaceFolder}/apps/server/**",
         "!**/node_modules/**"
       ]
     },
@@ -64,9 +64,9 @@
       "name": "Server: built (node dist/index.js)",
       "type": "node",
       "request": "launch",
-      "program": "${workspaceFolder}/server/dist/index.js",
-      "cwd": "${workspaceFolder}/server",
-      "envFile": "${workspaceFolder}/server/.env.example",
+      "program": "${workspaceFolder}/apps/server/dist/index.js",
+      "cwd": "${workspaceFolder}/apps/server",
+      "envFile": "${workspaceFolder}/apps/server/.env.example",
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
     },

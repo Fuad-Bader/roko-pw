@@ -6,7 +6,7 @@
 **/.env
 **/.env.*
 !**/.env.example
-server/data
+apps/server/data
 apps/desktop
 apps/extension
 Documentation

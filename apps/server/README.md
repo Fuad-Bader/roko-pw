@@ -11,7 +11,7 @@ on people's own devices.
 cp .env.example .env      # then set PUBLIC_URL and SMTP_*
 npm install
 npm run dev               # API at http://localhost:4567
-# or, from this folder: docker compose up -d --build   (image also contains the admin console)
+# or, from the repository root: docker compose up -d --build server   (image also contains the admin console)
 ```
 
 The admin console (`apps/admin`) is served at `/admin`. The Docker image builds

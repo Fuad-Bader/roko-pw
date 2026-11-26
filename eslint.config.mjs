@@ -14,7 +14,7 @@ const eslintConfig = defineConfig([
     "**/next-env.d.ts",
     "apps/extension/**",
     "apps/desktop/**",
-    "server/**",
+    "apps/server/**",
   ]),
 ]);
 

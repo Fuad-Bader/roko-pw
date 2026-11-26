@@ -5,7 +5,7 @@ metadata:
   type: reference
 ---
 
-The server (`server/`) loads config via Node's native `--env-file=.env` (no
+The server (`apps/server/`) loads config via Node's native `--env-file=.env` (no
 dotenv). Node's `--env-file` parser is fragile in two non-obvious ways that both
 cause variables to be silently dropped (showing up as `undefined`):
 

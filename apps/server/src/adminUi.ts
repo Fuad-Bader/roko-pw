@@ -13,8 +13,8 @@ import type { Hono, MiddlewareHandler } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 
 const here = dirname(fileURLToPath(import.meta.url))
-// server/src or server/dist → repo root → apps/admin/dist (local development)
-const ADMIN_DIR = resolve(process.env.ADMIN_DIR ?? join(here, '..', '..', 'apps', 'admin', 'dist'))
+// apps/server/src or apps/server/dist → apps/admin/dist (local development)
+const ADMIN_DIR = resolve(process.env.ADMIN_DIR ?? join(here, '..', '..', 'admin', 'dist'))
 
 // The console only talks to this server, so its policy can be strict.
 const CSP = [

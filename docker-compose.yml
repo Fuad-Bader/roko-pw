@@ -1,0 +1,48 @@
+# Builds and runs every deployable app from the root Dockerfile:
+#
+#   cp .env.example .env                        # public URLs and ports
+#   cp apps/server/.env.example apps/server/.env  # server config (SMTP, admins, ...)
+#   docker compose up -d --build
+#
+# The public URLs are baked into the static apps at build time, so rebuild
+# (--build) after changing them. Put a TLS-terminating reverse proxy in front.
+services:
+  landing:
+    build:
+      context: .
+      target: landing
+      args:
+        NEXT_PUBLIC_VAULT_URL: ${VAULT_URL:-http://localhost:3001}
+    ports:
+      - "${LANDING_PORT:-3000}:80"
+    restart: unless-stopped
+
+  vault:
+    build:
+      context: .
+      target: vault
+      args:
+        VITE_ORG_SERVER: ${ORG_SERVER_URL:-http://localhost:4567}
+    ports:
+      - "${VAULT_PORT:-3001}:80"
+    restart: unless-stopped
+
+  server:
+    # Org API, plus the admin console at /admin.
+    build:
+      context: .
+      target: server
+    ports:
+      - "${SERVER_PORT:-4567}:4567"
+    env_file:
+      - apps/server/.env
+    environment:
+      # The image's layout wins over local-development values in apps/server/.env.
+      PORT: "4567"
+      DATA_DIR: /data
+    volumes:
+      - roko-data:/data
+    restart: unless-stopped
+
+volumes:
+  roko-data:

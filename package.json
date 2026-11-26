@@ -13,7 +13,7 @@
     "dev:landing": "npm run dev -w @roko/landing",
     "dev:vault": "npm run dev -w @roko/vault",
     "dev:admin": "npm run dev -w @roko/admin",
-    "dev:server": "npm run dev --prefix server",
+    "dev:server": "npm run dev --prefix apps/server",
     "build": "npm run build -w @roko/landing -w @roko/vault -w @roko/admin",
     "build:landing": "npm run build -w @roko/landing",
     "build:vault": "npm run build -w @roko/vault",
