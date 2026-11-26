@@ -63,6 +63,22 @@ export function randomHex(bytes = 32): string {
     .join('')
 }
 
+const SESSION_TTL_MS = parseInt(process.env.SESSION_TTL_DAYS ?? '30') * 86400 * 1000
+
+/** Create a session for a user; returns the bearer token (stored hashed). */
+export async function issueSession(userId: string): Promise<{ token: string; expiresAt: number }> {
+  const now = Date.now()
+  const token = randomHex(32)
+  db.prepare('INSERT INTO sessions (id, token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)').run(
+    randomHex(16),
+    await sha256(token),
+    userId,
+    now,
+    now + SESSION_TTL_MS,
+  )
+  return { token, expiresAt: now + SESSION_TTL_MS }
+}
+
 // ── Account password hashing (scrypt; no external dependency) ──────────────────
 // Stored as "scrypt$<saltHex>$<hashHex>".
 

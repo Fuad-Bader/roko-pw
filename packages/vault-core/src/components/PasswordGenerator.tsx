@@ -10,7 +10,7 @@ const STRENGTH_COLORS = [
   'bg-error-solid',
   'bg-warning-solid',
   'bg-warning-solid',
-  'bg-brand-solid',
+  'bg-fg-brand-primary',
   'bg-success-solid',
 ]
 

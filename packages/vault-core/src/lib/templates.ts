@@ -1,10 +1,12 @@
 /**
  * Credential templates.
  *
- * SSH, RDP and VPN are built-in templates: they are not stored, can't be edited,
- * and keep their special actions (ssh command, .rdp file, config download).
- * Duplicating one creates a custom template with the same base, to which extra
- * fields can be added. A template with base 'custom' is built from scratch.
+ * SSH, RDP and VPN are built-in templates with fixed fields and special actions
+ * (ssh command, .rdp file, config download). A vault can customise them: name,
+ * icon and extra fields. The customisation is stored in the vault as a template
+ * with the built-in id ("builtin:ssh"), an *override*; deleting it resets the
+ * template to its default. Duplicating any template creates a custom template
+ * with the same base. A template with base 'custom' is built from scratch.
  */
 import type {
   Collection,
@@ -26,6 +28,34 @@ export const BUILTIN_TEMPLATES: CredentialTemplate[] = [
 ]
 
 export const isBuiltin = (t: Pick<CredentialTemplate, 'id'>) => t.id.startsWith(BUILTIN_PREFIX)
+
+export const builtinIdFor = (base: Exclude<TemplateBase, 'custom'>) => `${BUILTIN_PREFIX}${base}`
+
+/** The built-in templates as this vault sees them: defaults replaced by any saved override. */
+export function effectiveBuiltins(vaultTemplates: CredentialTemplate[]): CredentialTemplate[] {
+  return BUILTIN_TEMPLATES.map((d) => vaultTemplates.find((t) => t.id === d.id) ?? d)
+}
+
+/** User-made templates only (overrides of built-ins are excluded). */
+export const customTemplatesOf = (vaultTemplates: CredentialTemplate[]) => vaultTemplates.filter((t) => !isBuiltin(t))
+
+/** True when the vault has customised this built-in template. */
+export const isOverridden = (vaultTemplates: CredentialTemplate[], id: string) => vaultTemplates.some((t) => t.id === id)
+
+/**
+ * The template that describes an item's extra fields: its own custom template,
+ * or, for a plain SSH / RDP / VPN item, the vault's version of that built-in.
+ */
+export function templateForEntry(
+  entry: Pick<VaultEntry, 'type' | 'templateId'>,
+  vaultTemplates: CredentialTemplate[],
+): CredentialTemplate | undefined {
+  if (entry.templateId) return vaultTemplates.find((t) => t.id === entry.templateId)
+  if (entry.type === 'ssh' || entry.type === 'rdp' || entry.type === 'vpn') {
+    return vaultTemplates.find((t) => t.id === builtinIdFor(entry.type as 'ssh'))
+  }
+  return undefined
+}
 
 /** The fixed fields a built-in base provides, listed in the template editor. */
 export const BASE_FIELDS: Record<Exclude<TemplateBase, 'custom'>, string[]> = {
@@ -87,7 +117,7 @@ export function validateTemplate(t: CredentialTemplate, others: CredentialTempla
   const name = t.name.trim()
   if (!name) return 'Give the template a name.'
   if (name.length > 60) return 'Keep the name under 60 characters.'
-  const clash = [...BUILTIN_TEMPLATES, ...others].find(
+  const clash = [...effectiveBuiltins(others), ...customTemplatesOf(others)].find(
     (o) => o.id !== t.id && o.name.trim().toLowerCase() === name.toLowerCase(),
   )
   if (clash) return `A template called "${clash.name}" already exists.`
@@ -223,7 +253,11 @@ export function parseVaultData(json: string): VaultData {
   return {
     entries: (raw.entries ?? []).map(normalizeEntry),
     collections: raw.collections ?? [],
-    templates: (raw.templates ?? []).filter((t) => t && typeof t.id === 'string' && !t.id.startsWith(BUILTIN_PREFIX)).map(normalizeTemplate),
+    templates: (raw.templates ?? [])
+      .filter((t) => t && typeof t.id === 'string')
+      .map(normalizeTemplate)
+      // An override must keep its built-in's base (builtin:ssh is always an SSH template).
+      .filter((t) => !isBuiltin(t) || BUILTIN_TEMPLATES.some((d) => d.id === t.id && d.base === t.base)),
   }
 }
 

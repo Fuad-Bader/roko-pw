@@ -5,6 +5,7 @@ import { logger } from 'hono/logger'
 import { authRoutes } from './routes/auth.js'
 import { vaultRoutes } from './routes/vaults.js'
 import { adminRoutes } from './routes/admin.js'
+import { setupRoutes, prepareSetup, setupState, orgName } from './routes/setup.js'
 import { initDb } from './db.js'
 import { mountAdminUi } from './adminUi.js'
 
@@ -36,9 +37,12 @@ app.get('/', (c) =>
     mode: 'org',
     // Clients use this to confirm they reached a RokoPW server
     kind: 'roko-pw-server',
+    org: orgName() || null,
+    setup: setupState(),
   }),
 )
 
+app.route('/api/setup', setupRoutes) // first-run setup wizard
 app.route('/api/auth', authRoutes)
 app.route('/api/vaults', vaultRoutes) // member access to vaults
 app.route('/api/admin', adminRoutes) // org admin API
@@ -53,4 +57,5 @@ app.onError((err, c) => {
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`RokoPW server running at http://localhost:${info.port}`)
   console.log('Configure SMTP in .env to send sign-in codes (or MAIL_LOG=true for local development).')
+  prepareSetup() // last, so a new server's setup code is easy to spot in the log
 })

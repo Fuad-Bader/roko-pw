@@ -84,6 +84,24 @@ export interface AuditEvent {
   details: Record<string, unknown> | null
 }
 
+export type SetupState = 'needs-admin' | 'in-progress' | 'complete'
+export type MailMode = 'log' | 'smtp' | 'unconfigured'
+
+export interface SetupStatus {
+  state: SetupState
+  orgName: string
+  mail: MailMode
+}
+
+export interface OrgSettings {
+  orgName: string
+  allowSignups: boolean
+  /** Set by ALLOW_SIGNUPS on the server; can't be changed here. */
+  allowSignupsLocked: boolean
+  mail: MailMode
+  setup: SetupState
+}
+
 export class OrgApiError extends Error {
   status: number
   code?: string
@@ -188,6 +206,16 @@ export const convertLegacyVault = (s: OrgSession, id: string, blob: EncryptedVau
     body: { blob, wrappedKeys },
   })
 
+// ─── First-run setup ──────────────────────────────────────────────────────────
+
+export const setup = {
+  status: (serverUrl: string) => request<SetupStatus>(serverUrl, '/api/setup'),
+  checkCode: (serverUrl: string, setupCode: string) =>
+    request<{ ok: true }>(serverUrl, '/api/setup/check', { method: 'POST', body: { setupCode } }),
+  createAdmin: (serverUrl: string, body: { setupCode: string; orgName: string; name: string; email: string; authHash: string }) =>
+    request<{ token: string; expiresAt: number }>(serverUrl, '/api/setup/admin', { method: 'POST', body }),
+}
+
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
 export const admin = {
@@ -215,6 +243,12 @@ export const admin = {
       method: 'POST',
       body: { baseRevision, blob, wrappedKeys },
     }),
+
+  settings: (s: OrgSession) => authed(s)<OrgSettings>('/api/admin/settings'),
+  updateSettings: (s: OrgSession, patch: { orgName?: string; allowSignups?: boolean }) =>
+    authed(s)<OrgSettings>('/api/admin/settings', { method: 'PATCH', body: patch }),
+  testEmail: (s: OrgSession) => authed(s)<{ ok: true; to: string }>('/api/admin/settings/test-email', { method: 'POST' }),
+  completeSetup: (s: OrgSession) => authed(s)<OrgSettings>('/api/admin/setup/complete', { method: 'POST' }),
 
   audit: (s: OrgSession, limit = 200) => authed(s)<AuditEvent[]>(`/api/admin/audit?limit=${limit}`),
 }

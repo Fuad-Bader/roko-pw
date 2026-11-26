@@ -116,6 +116,13 @@ export function initDb(): void {
       details     TEXT
     );
     CREATE INDEX IF NOT EXISTS audit_log_at ON audit_log(at DESC);
+
+    -- Org-wide settings chosen in the admin console (org name, sign-up policy,
+    -- first-run setup state).
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `)
 
   bootstrapAdmins()
@@ -169,4 +176,28 @@ export function audit(
   } catch (err) {
     console.error('audit failed', err)
   }
+}
+
+export function getSetting(key: string): string | null {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
+  return row?.value ?? null
+}
+
+export function setSetting(key: string, value: string | null): void {
+  if (value === null) db.prepare('DELETE FROM settings WHERE key = ?').run(key)
+  else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value').run(key, value)
+}
+
+export function userCount(): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n
+}
+
+/**
+ * Whether anyone may create an account. ALLOW_SIGNUPS in the environment wins
+ * (and locks the switch in the admin console); otherwise the admin decides.
+ */
+export function signupPolicy(): { allowSignups: boolean; locked: boolean } {
+  const env = (process.env.ALLOW_SIGNUPS ?? '').trim().toLowerCase()
+  if (env === 'true' || env === 'false') return { allowSignups: env === 'true', locked: true }
+  return { allowSignups: getSetting('allow_signups') === 'true', locked: false }
 }

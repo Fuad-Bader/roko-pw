@@ -17,7 +17,7 @@ import { Eye, EyeOff, Upload01 } from '@untitledui/icons'
 import { PasswordGenerator } from './PasswordGenerator'
 import { ENTRY_TYPES, TYPE_ORDER } from './entryMeta'
 import { TemplateGlyph } from './TemplateIcon'
-import { isMultilineKind } from '@roko/vault-core/lib/templates'
+import { builtinIdFor, customTemplatesOf, isBuiltin, isMultilineKind } from '@roko/vault-core/lib/templates'
 
 interface Props {
   initial?: VaultEntry
@@ -54,7 +54,8 @@ const formatCvv = (v: string) => v.replace(/\D/g, '').slice(0, 4)
 const formatPort = (v: string) => v.replace(/\D/g, '').slice(0, 5)
 
 export function CredentialForm({ initial, defaultType, templates = [], defaultTemplateId, onSave, onCancel }: Props) {
-  const startTemplate = templates.find((t) => t.id === (initial?.templateId ?? defaultTemplateId))
+  const customTemplates = customTemplatesOf(templates)
+  const startTemplate = customTemplates.find((t) => t.id === (initial?.templateId ?? defaultTemplateId))
   const [type, setType] = useState<EntryType>(
     initial?.type ?? (startTemplate ? (startTemplate.base === 'custom' ? 'custom' : startTemplate.base) : defaultType ?? 'login'),
   )
@@ -90,7 +91,12 @@ export function CredentialForm({ initial, defaultType, templates = [], defaultTe
 
   const isEditing = !!initial
   const meta = ENTRY_TYPES[type]
-  const template = templates.find((t) => t.id === templateId)
+  // A custom template chosen for this item…
+  const template = templateId ? templates.find((t) => t.id === templateId && !isBuiltin(t)) : undefined
+  // …or, for a plain SSH / RDP / VPN item, the vault's customised built-in.
+  const builtinOverride = (t: EntryType) =>
+    t === 'ssh' || t === 'rdp' || t === 'vpn' ? templates.find((x) => x.id === builtinIdFor(t)) : undefined
+  const fieldTemplate = template ?? (templateId ? undefined : builtinOverride(type))
 
   const chooseBuiltin = (t: EntryType) => {
     setType(t)
@@ -106,7 +112,7 @@ export function CredentialForm({ initial, defaultType, templates = [], defaultTe
     setError('')
     if (!title.trim()) { setError('Title is required.'); return }
     if (type === 'custom' && !template) { setError('This item\'s template no longer exists.'); return }
-    for (const f of template?.fields ?? []) {
+    for (const f of fieldTemplate?.fields ?? []) {
       if (f.required && !(fieldValues[f.id] ?? '').trim()) { setError(`${f.label} is required.`); return }
     }
     if (type === 'login') {
@@ -165,14 +171,15 @@ export function CredentialForm({ initial, defaultType, templates = [], defaultTe
       }
     }
 
-    if (template) {
-      // Keep only this template's fields (values of removed fields stay on old items untouched).
+    if (fieldTemplate) {
+      // Values of fields later removed from the template stay on the item untouched.
       const fields: Record<string, string> = { ...(initial?.fields ?? {}) }
-      for (const f of template.fields) {
+      for (const f of fieldTemplate.fields) {
         const v = fieldValues[f.id] ?? ''
         fields[f.id] = isMultilineKind(f.kind) ? v.replace(/\s+$/, '') : v.trim()
       }
-      extra = { ...extra, templateId: template.id, fields }
+      // Only custom templates are recorded on the item; built-in overrides apply by type.
+      extra = { ...extra, ...(template ? { templateId: template.id } : {}), fields }
     }
 
     setSaving(true)
@@ -193,17 +200,17 @@ export function CredentialForm({ initial, defaultType, templates = [], defaultTe
         <div className="space-y-1.5">
           <div className="grid grid-cols-3 gap-1.5">
             {TYPE_ORDER.slice(0, 3).map((id) => (
-              <TypeButton key={id} id={id} active={type === id && !templateId} onSelect={chooseBuiltin} />
+              <TypeButton key={id} id={id} override={builtinOverride(id)} active={type === id && !templateId} onSelect={chooseBuiltin} />
             ))}
           </div>
           <div className="grid grid-cols-4 gap-1.5">
             {TYPE_ORDER.slice(3).map((id) => (
-              <TypeButton key={id} id={id} active={type === id && !templateId} onSelect={chooseBuiltin} />
+              <TypeButton key={id} id={id} override={builtinOverride(id)} active={type === id && !templateId} onSelect={chooseBuiltin} />
             ))}
           </div>
-          {templates.length > 0 && (
+          {customTemplates.length > 0 && (
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {templates.map((t) => {
+              {customTemplates.map((t) => {
                 const active = templateId === t.id
                 return (
                   <button
@@ -387,10 +394,10 @@ export function CredentialForm({ initial, defaultType, templates = [], defaultTe
       )}
 
       {/* ── Template fields ── */}
-      {template && template.fields.length > 0 && (
+      {fieldTemplate && fieldTemplate.fields.length > 0 && (
         <div className="space-y-4">
-          {type !== 'custom' && <div className="border-t border-border-secondary pt-3 font-mono text-[10px] uppercase tracking-[0.1em] text-tertiary">{template.name} fields</div>}
-          {template.fields.map((f) => (
+          {type !== 'custom' && <div className="border-t border-border-secondary pt-3 font-mono text-[10px] uppercase tracking-[0.1em] text-tertiary">{fieldTemplate.name} fields</div>}
+          {fieldTemplate.fields.map((f) => (
             <TemplateFieldInput key={f.id} field={f} value={fieldValues[f.id] ?? ''} onChange={(v) => setFieldValues((x) => ({ ...x, [f.id]: v }))} />
           ))}
         </div>
@@ -430,8 +437,20 @@ function normalizeKeyText(text: string): string {
   return t ? `${t}\n` : ''
 }
 
-function TypeButton({ id, active, onSelect }: { id: EntryType; active: boolean; onSelect: (t: EntryType) => void }) {
-  const { label, icon: Icon } = ENTRY_TYPES[id]
+function TypeButton({
+  id,
+  active,
+  onSelect,
+  override,
+}: {
+  id: EntryType
+  active: boolean
+  onSelect: (t: EntryType) => void
+  /** The vault's customised version of this built-in template, if any. */
+  override?: CredentialTemplate
+}) {
+  const { label: defaultLabel, icon: Icon } = ENTRY_TYPES[id]
+  const label = override?.name ?? defaultLabel
   return (
     <button
       type="button"
@@ -443,8 +462,8 @@ function TypeButton({ id, active, onSelect }: { id: EntryType; active: boolean; 
           : 'border-border-primary bg-tertiary text-tertiary hover:border-border-brand'
       }`}
     >
-      <Icon className="size-4" />
-      {label}
+      {override ? <TemplateGlyph icon={override.icon} size={16} /> : <Icon className="size-4" />}
+      <span className="max-w-full truncate">{label}</span>
     </button>
   )
 }

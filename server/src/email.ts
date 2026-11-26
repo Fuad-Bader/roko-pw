@@ -4,6 +4,12 @@ import nodemailer from 'nodemailer'
 // For local development and tests only: login codes appear in the log.
 const MAIL_LOG = (process.env.MAIL_LOG ?? '').trim().toLowerCase() === 'true'
 
+/** How email is delivered: printed to the log, sent over SMTP, or not set up. */
+export function mailMode(): 'log' | 'smtp' | 'unconfigured' {
+  if (MAIL_LOG) return 'log'
+  return process.env.SMTP_HOST ? 'smtp' : 'unconfigured'
+}
+
 function transport() {
   if (MAIL_LOG) return nodemailer.createTransport({ jsonTransport: true })
   return nodemailer.createTransport({
@@ -89,6 +95,18 @@ export async function sendVaultWriteNotification(
     html: layout(
       'Vault updated',
       `<p><strong>${esc(writerEmail)}</strong> saved changes to the vault <strong>${esc(vaultName)}</strong>.</p>`,
+    ),
+  })
+}
+
+export async function sendTestEmail(toEmail: string): Promise<void> {
+  await send({
+    to: toEmail,
+    subject: 'RokoPW test email',
+    text: 'Email from your RokoPW server works. Sign-in codes and invitations will arrive like this one.',
+    html: layout(
+      'Email works',
+      '<p>Your RokoPW server can send email. Sign-in codes and invitations will arrive like this one.</p>',
     ),
   })
 }

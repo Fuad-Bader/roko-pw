@@ -6,9 +6,10 @@
  * wraps it for the new member's public key; the server only stores the result.
  */
 import { Hono, type Context } from 'hono'
-import { db, audit } from '../db.js'
+import { db, audit, getSetting, setSetting, signupPolicy } from '../db.js'
 import { requireAuth, requireAdmin, randomHex, type AuthUser } from '../middleware/auth.js'
-import { sendUserAddedEmail } from '../email.js'
+import { mailMode, sendTestEmail, sendUserAddedEmail } from '../email.js'
+import { orgName, setupState } from './setup.js'
 import { isVaultV2, isWrappedKey } from '../types.js'
 
 type Env = { Variables: { user: AuthUser } }
@@ -366,6 +367,67 @@ adminRoutes.post('/vaults/:id/rotate', async (c) => {
   if (result.conflict) return c.json({ error: 'The vault changed while rotating. Try again.', revision: result.revision }, 409)
   audit(admin, 'vault.key_rotated', vault.id, { vault: vault.name })
   return c.json({ ok: true, revision: result.revision })
+})
+
+// ── Org settings and first-run setup ──────────────────────────────────────────
+
+function settingsBody() {
+  const policy = signupPolicy()
+  return {
+    orgName: orgName(),
+    allowSignups: policy.allowSignups,
+    allowSignupsLocked: policy.locked,
+    mail: mailMode(),
+    setup: setupState(),
+  }
+}
+
+adminRoutes.get('/settings', (c) => c.json(settingsBody()))
+
+adminRoutes.patch('/settings', async (c) => {
+  const admin = c.get('user')
+  const body = await json<{ orgName: string; allowSignups: boolean }>(c)
+  const changes: Record<string, unknown> = {}
+  if (body.orgName !== undefined) {
+    const name = String(body.orgName).trim().slice(0, 100)
+    if (!name) return c.json({ error: 'Enter your organization name.' }, 400)
+    if (name !== orgName()) {
+      setSetting('org_name', name)
+      changes.orgName = name
+    }
+  }
+  if (body.allowSignups !== undefined) {
+    if (typeof body.allowSignups !== 'boolean') return c.json({ error: 'Invalid allowSignups' }, 400)
+    if (signupPolicy().locked) return c.json({ error: 'Sign-ups are set by ALLOW_SIGNUPS on the server.' }, 409)
+    if ((getSetting('allow_signups') === 'true') !== body.allowSignups) {
+      setSetting('allow_signups', String(body.allowSignups))
+      changes.allowSignups = body.allowSignups
+    }
+  }
+  if (Object.keys(changes).length) audit(admin, 'settings.updated', null, changes)
+  return c.json(settingsBody())
+})
+
+// Send a test email to the signed-in admin.
+adminRoutes.post('/settings/test-email', async (c) => {
+  const admin = c.get('user')
+  try {
+    await sendTestEmail(admin.email)
+  } catch (err) {
+    console.error('Test email failed:', err)
+    const reason = err instanceof Error ? err.message : String(err)
+    return c.json({ error: `Could not send: ${reason.slice(0, 200)}` }, 502)
+  }
+  return c.json({ ok: true, to: admin.email, mail: mailMode() })
+})
+
+adminRoutes.post('/setup/complete', (c) => {
+  const admin = c.get('user')
+  if (setupState() !== 'complete') {
+    setSetting('setup_state', 'complete')
+    audit(admin, 'setup.completed')
+  }
+  return c.json(settingsBody())
 })
 
 // ── Audit log ─────────────────────────────────────────────────────────────────

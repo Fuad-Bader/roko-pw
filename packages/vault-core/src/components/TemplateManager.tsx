@@ -4,7 +4,9 @@ import { useMemo, useRef, useState } from 'react'
 import type { CredentialTemplate, FieldKind, TemplateBase, TemplateIcon } from '@roko/vault-core/lib/types'
 import {
   BASE_FIELDS,
-  BUILTIN_TEMPLATES,
+  customTemplatesOf,
+  effectiveBuiltins,
+  isOverridden,
   FIELD_KINDS,
   blankTemplate,
   duplicateTemplate,
@@ -16,7 +18,7 @@ import {
 } from '@roko/vault-core/lib/templates'
 import { Button } from '@roko/ui/components/base/buttons/button'
 import { cx } from '@roko/ui/utils/cx'
-import { ArrowDown, ArrowUp, Copy01, Edit03, Lock01, Plus, SearchMd, Trash01, Upload01 } from '@untitledui/icons'
+import { ArrowDown, ArrowUp, Copy01, Edit03, Lock01, Plus, RefreshCcw01, SearchMd, Trash01, Upload01 } from '@untitledui/icons'
 import { useVault } from './VaultProvider'
 import { ICON_KEYWORDS, ICON_LIBRARY, TemplateGlyph, TemplateTile } from './TemplateIcon'
 
@@ -46,9 +48,10 @@ export function TemplateManager({ onUse }: { onUse: (templateId: string) => void
         initial={editing.template}
         isNew={editing.isNew}
         others={templates.filter((t) => t.id !== editing.template.id)}
+        builtin={isBuiltin(editing.template)}
         onCancel={() => setEditing(null)}
         onSave={async (t) => {
-          await saveTemplate(t)
+          await saveTemplate(isBuiltin(t) && !t.createdAt ? { ...t, createdAt: Date.now() } : t)
           setEditing(null)
         }}
       />
@@ -68,6 +71,7 @@ export function TemplateManager({ onUse }: { onUse: (templateId: string) => void
 
   const Row = ({ t }: { t: CredentialTemplate }) => {
     const builtin = isBuiltin(t)
+    const customised = builtin && isOverridden(templates, t.id)
     const count = builtin ? entries.filter((e) => e.type === t.base && !e.templateId && !e.deletedAt).length : usage[t.id] ?? 0
     return (
       <li className="flex items-center gap-3 py-3">
@@ -76,13 +80,15 @@ export function TemplateManager({ onUse }: { onUse: (templateId: string) => void
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold">{t.name}</span>
             {builtin ? (
-              <span className="roko-tag gap-1 px-2 py-0 text-[10px]"><Lock01 className="size-2.5" /> Built in</span>
+              <span className="roko-tag gap-1 px-2 py-0 text-[10px]">
+                <Lock01 className="size-2.5" /> {customised ? 'Built in · customised' : 'Built in'}
+              </span>
             ) : t.base !== 'custom' ? (
               <span className="roko-tag px-2 py-0 text-[10px]">Extends {BASE_LABEL[t.base]}</span>
             ) : null}
           </div>
           <div className="mt-0.5 font-mono text-[11px] text-tertiary">
-            {builtin ? `${BASE_FIELDS[t.base as 'ssh'].length} fields` : `${(t.base !== 'custom' ? BASE_FIELDS[t.base].length : 0) + t.fields.length} fields`}
+            {`${(t.base !== 'custom' ? BASE_FIELDS[t.base].length : 0) + t.fields.length} fields`}
             {' · '}
             {count} item{count === 1 ? '' : 's'}
           </div>
@@ -98,11 +104,24 @@ export function TemplateManager({ onUse }: { onUse: (templateId: string) => void
               <Copy01 className="size-4" />
             </IconBtn>
           )}
+          {!readOnly && (
+            <IconBtn label={`Edit ${t.name}`} onClick={() => setEditing({ template: t, isNew: false })}>
+              <Edit03 className="size-4" />
+            </IconBtn>
+          )}
+          {customised && !readOnly && (
+            confirmDelete === t.id ? (
+              <button type="button" onClick={() => remove(t.id)} className="rounded-full bg-warning-primary px-2.5 py-1 text-xs font-semibold text-warning-primary" title="Restores the default name, icon and fields. Values in extra fields are kept on items.">
+                Reset?
+              </button>
+            ) : (
+              <IconBtn label={`Reset ${t.name} to default`} onClick={() => setConfirmDelete(t.id)}>
+                <RefreshCcw01 className="size-4" />
+              </IconBtn>
+            )
+          )}
           {!builtin && !readOnly && (
             <>
-              <IconBtn label={`Edit ${t.name}`} onClick={() => setEditing({ template: t, isNew: false })}>
-                <Edit03 className="size-4" />
-              </IconBtn>
               {confirmDelete === t.id ? (
                 <button type="button" onClick={() => remove(t.id)} className="rounded-full bg-error-primary px-2.5 py-1 text-xs font-semibold text-error-primary">
                   Delete?
@@ -122,14 +141,15 @@ export function TemplateManager({ onUse }: { onUse: (templateId: string) => void
   return (
     <div className="space-y-6">
       <p className="text-[13px] leading-relaxed text-tertiary">
-        Templates decide which fields an item has. Duplicate a built-in template to add your own fields to SSH, RDP or VPN items,
-        or start from scratch for anything else, like databases, API keys or certificates.
+        Templates decide which fields an item has. Edit the built-in SSH, RDP and VPN templates to rename them, change their icon or
+        add fields to every item of that type; duplicate one for a variant; or start from scratch for anything else, like databases,
+        API keys or certificates.
       </p>
 
       <section>
         <div className={`${sectionCls} mb-1`}>Built in</div>
         <ul className="divide-y divide-border-secondary">
-          {BUILTIN_TEMPLATES.map((t) => <Row key={t.id} t={t} />)}
+          {effectiveBuiltins(templates).map((t) => <Row key={t.id} t={t} />)}
         </ul>
       </section>
 
@@ -137,13 +157,13 @@ export function TemplateManager({ onUse }: { onUse: (templateId: string) => void
         <div className="mb-1 flex items-center justify-between">
           <span className={sectionCls}>Your templates</span>
         </div>
-        {templates.length === 0 ? (
+        {customTemplatesOf(templates).length === 0 ? (
           <p className="rounded-[14px] border border-dashed border-border-primary px-4 py-5 text-center text-[13px] text-tertiary">
             No custom templates yet.
           </p>
         ) : (
           <ul className="divide-y divide-border-secondary">
-            {templates.map((t) => <Row key={t.id} t={t} />)}
+            {customTemplatesOf(templates).map((t) => <Row key={t.id} t={t} />)}
           </ul>
         )}
       </section>
@@ -179,12 +199,15 @@ function TemplateEditor({
   initial,
   isNew,
   others,
+  builtin,
   onSave,
   onCancel,
 }: {
   initial: CredentialTemplate
   isNew: boolean
   others: CredentialTemplate[]
+  /** Editing SSH / RDP / VPN: built-in fields stay fixed; name, icon and extra fields change. */
+  builtin?: boolean
   onSave: (t: CredentialTemplate) => Promise<void>
   onCancel: () => void
 }) {
@@ -228,6 +251,13 @@ function TemplateEditor({
           <input id="tpl-name" className={inputCls} value={t.name} onChange={(e) => patch({ name: e.target.value })} placeholder="e.g. PostgreSQL database" autoFocus maxLength={60} />
         </div>
       </div>
+
+      {builtin && (
+        <p className="rounded-[12px] bg-secondary px-3 py-2.5 text-xs leading-relaxed text-tertiary">
+          Changes apply to every {BASE_LABEL[t.base]} item in this vault. The built-in fields and actions can&apos;t be removed;
+          use <strong>Reset</strong> in the template list to go back to the default.
+        </p>
+      )}
 
       <IconPicker icon={t.icon} onChange={(icon) => patch({ icon })} />
 

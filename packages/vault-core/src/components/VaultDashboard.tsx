@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { VaultEntry, EntryType, EntryDraft, Collection, CredentialTemplate } from '@roko/vault-core/lib/types'
 import { useVault } from './VaultProvider'
 import { useTheme } from '@roko/ui/ThemeProvider'
@@ -10,8 +10,11 @@ import { ENTRY_TYPES } from './entryMeta'
 import { InfraDetail } from './InfraDetail'
 import { FieldRow } from './FieldRow'
 import { TemplateManager } from './TemplateManager'
+import { ResizeHandle, useResizableWidth } from '@roko/ui/components/ResizeHandle'
+import { Drawer } from '@roko/ui/components/Drawer'
 import { TemplateTile, TemplateGlyph } from './TemplateIcon'
 import { TemplateFieldsView } from './InfraDetail'
+import { builtinIdFor, templateForEntry } from '@roko/vault-core/lib/templates'
 import { DEFAULT_PORT, hostWithPort, vpnProtocolMeta, inspectPrivateKey } from '@roko/vault-core/lib/infra'
 import { PasswordGenerator } from './PasswordGenerator'
 import { RecoveryPhraseDisplay } from './RecoveryPhraseDisplay'
@@ -36,7 +39,6 @@ import {
   RefreshCw01,
   ShieldTick,
   Edit03,
-  XClose,
   Building07,
   HardDrive,
   Download01,
@@ -49,6 +51,15 @@ import {
 } from '@untitledui/icons'
 
 type Panel = 'none' | 'add' | 'edit' | 'settings' | 'generator' | 'templates'
+
+const PANEL_TITLES: Record<Panel, string> = {
+  none: '',
+  add: 'Add item',
+  edit: 'Edit item',
+  settings: 'Settings',
+  generator: 'Password generator',
+  templates: 'Templates',
+}
 type Category = 'all' | 'favorites' | 'ssh' | 'rdp' | 'vpn' | 'logins' | 'cards' | 'notes' | 'passkeys' | 'trash'
 type View = { kind: 'category'; category: Category } | { kind: 'collection'; id: string } | { kind: 'template'; id: string }
 
@@ -232,7 +243,12 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [panel, setPanel] = useState<Panel>('none')
   const [view, setView] = useState<View>({ kind: 'category', category: 'all' })
   const [editing, setEditing] = useState<VaultEntry | null>(null)
-  const [selected, setSelected] = useState<VaultEntry | null>(null)
+  const [selectedRef, setSelected] = useState<VaultEntry | null>(null)
+  // Always show the current version of the selected item (after edits or changes synced from others).
+  const selected = useMemo(
+    () => (selectedRef ? entries.find((e) => e.id === selectedRef.id) ?? null : null),
+    [selectedRef, entries],
+  )
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   // Set when "Use" is clicked in the template manager.
   const [addTemplateId, setAddTemplateId] = useState<string | undefined>()
@@ -248,8 +264,32 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [dragOverCollection, setDragOverCollection] = useState<string | null>(null)
 
   const activeCollectionId = view.kind === 'collection' ? view.id : null
+
+  // Resizable columns (remembered per browser). The detail panel keeps at least 440px.
+  const [viewportWidth, setViewportWidth] = useState(1440)
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+  const sidebar = useResizableWidth('roko-layout-sidebar', { initial: 240, min: 200, max: 360 })
+  const drawer = useResizableWidth('roko-layout-drawer', {
+    initial: 520,
+    min: 400,
+    max: Math.max(400, Math.min(860, viewportWidth - 120)),
+  })
+  const list = useResizableWidth('roko-layout-list', {
+    initial: 320,
+    min: 260,
+    max: Math.max(260, Math.min(560, viewportWidth - sidebar.width - 440)),
+  })
   const tplById = useMemo(() => new Map(templates.map((t) => [t.id, t])), [templates])
   const customTemplates = templates.filter((t) => t.base === 'custom')
+  // The vault's customised SSH / RDP / VPN templates (renamed, new icon) show in the sidebar.
+  const builtinOverride = (category: string) =>
+    category === 'ssh' || category === 'rdp' || category === 'vpn' ? tplById.get(builtinIdFor(category)) : undefined
+  const builtinName = (category: string) => builtinOverride(category)?.name
 
   const counts = useMemo(() => {
     const live = entries.filter((e) => !e.deletedAt)
@@ -292,23 +332,22 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
         (e.cardholder ?? '').toLowerCase().includes(q) ||
         [e.host, e.domain, e.gateway, e.jumpHost].some((v) => (v ?? '').toLowerCase().includes(q)) ||
         // Plain (non-secret) template field values are searchable too.
-        (!!e.templateId &&
-          !!tplById.get(e.templateId)?.fields.some(
+        (!!e.fields &&
+          !!templateForEntry(e, templates)?.fields.some(
             (f) => f.kind !== 'secret' && f.kind !== 'secretMultiline' && (e.fields?.[f.id] ?? '').toLowerCase().includes(q),
           )),
     )
-  }, [entries, query, view, tplById])
+  }, [entries, query, view, templates])
 
   const viewTitle =
     view.kind === 'collection'
       ? collections.find((c) => c.id === view.id)?.name ?? 'Collection'
       : view.kind === 'template'
         ? tplById.get(view.id)?.name ?? 'Template'
-        : NAV_ITEMS.find((n) => n.id === view.category)?.label ?? 'All items'
+        : builtinName(view.category) ?? NAV_ITEMS.find((n) => n.id === view.category)?.label ?? 'All items'
 
   const openEdit = useCallback((entry: VaultEntry) => {
     setEditing(entry)
-    setSelected(null)
     setPanel('edit')
   }, [])
 
@@ -351,7 +390,6 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const openPanel = (p: Panel) => {
     setPanel((prev) => (prev === p ? 'none' : p))
     setEditing(null)
-    setSelected(null)
     setAddTemplateId(undefined)
     setAddTypeOverride(undefined)
   }
@@ -392,7 +430,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '240px 320px 1fr',
+        gridTemplateColumns: `${sidebar.width}px ${list.width}px minmax(0, 1fr)`,
         height: '100vh',
         overflow: 'hidden',
         background: 'var(--color-bg-primary)',
@@ -402,6 +440,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
       {/* ── Left Sidebar ── */}
       <aside
         style={{
+          position: 'relative',
           background: 'var(--color-bg-secondary)',
           borderRight: '1px solid var(--color-border-secondary)',
           display: 'flex',
@@ -409,6 +448,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
           overflow: 'hidden',
         }}
       >
+        <ResizeHandle label="Resize sidebar" width={sidebar.width} min={sidebar.min} max={sidebar.max} onResize={sidebar.setWidth} onReset={sidebar.reset} />
         {/* Logo */}
         <div style={{ padding: '16px 12px 12px', borderBottom: '1px solid var(--color-border-secondary)' }}>
           <Logo size={26} />
@@ -481,8 +521,14 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                   transition: 'background 0.1s, color 0.1s',
                 }}
               >
-                <Icon size={15} />
-                <span style={{ flex: 1 }}>{item.label}</span>
+                {builtinOverride(item.id) ? (
+                  <span style={{ width: 15, display: 'inline-flex', justifyContent: 'center' }}>
+                    <TemplateGlyph icon={builtinOverride(item.id)!.icon} size={15} />
+                  </span>
+                ) : (
+                  <Icon size={15} />
+                )}
+                <span style={{ flex: 1 }}>{builtinName(item.id) ?? item.label}</span>
                 {count > 0 && (
                   <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
                     {count}
@@ -634,7 +680,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                   borderRadius: 6,
                   marginBottom: 1,
                   background: isOver
-                    ? 'color-mix(in srgb, var(--ember-500) 12%, transparent)'
+                    ? 'var(--ember-a12)'
                     : active
                       ? 'var(--color-bg-primary)'
                       : 'transparent',
@@ -766,12 +812,14 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
       {/* ── Middle: Credential List ── */}
       <section
         style={{
+          position: 'relative',
           borderRight: '1px solid var(--color-border-secondary)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
         }}
       >
+        <ResizeHandle label="Resize item list" width={list.width} min={list.min} max={list.max} onResize={list.setWidth} onReset={list.reset} />
         <div
           style={{
             padding: '14px 16px 10px',
@@ -872,7 +920,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
               const isSelected = selected?.id === entry.id
               const subtitle =
                 ENTRY_TYPES[entry.type].infra
-                  ? infraSubtitle(entry, entry.templateId ? tplById.get(entry.templateId) : undefined)
+                  ? infraSubtitle(entry, templateForEntry(entry, templates))
                   : entry.type === 'card'
                   ? entry.cardNumber
                     ? `•••• ${entry.cardNumber.replace(/\s/g, '').slice(-4)}`
@@ -893,13 +941,13 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                     gap: 10,
                     padding: '9px 14px',
                     borderBottom: '1px solid var(--color-border-secondary)',
-                    background: isSelected ? 'color-mix(in srgb, var(--ember-500) 12%, transparent)' : 'transparent',
+                    background: isSelected ? 'var(--ember-a12)' : 'transparent',
                     opacity: dragId === entry.id ? 0.5 : 1,
                     cursor: 'pointer',
                     transition: 'background 0.1s',
                   }}
                 >
-                  <EntryAvatar entry={entry} size={32} template={entry.templateId ? tplById.get(entry.templateId) : undefined} />
+                  <EntryAvatar entry={entry} size={32} template={templateForEntry(entry, templates)} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
@@ -960,52 +1008,10 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
 
       {/* ── Right Panel ── */}
       <main style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--color-bg-primary)' }}>
-        {panel === 'add' && (
-          <RightPanel title="Add item" onClose={closePanel}>
-            <CredentialForm
-              defaultType={addTypeOverride ?? addTypeFor(view)}
-              templates={templates}
-              defaultTemplateId={addTemplateId ?? (view.kind === 'template' ? view.id : undefined)}
-              onSave={handleAdd}
-              onCancel={closePanel}
-            />
-          </RightPanel>
-        )}
-
-        {panel === 'edit' && editing && (
-          <RightPanel title="Edit item" onClose={closePanel}>
-            <CredentialForm initial={editing} templates={templates} onSave={handleUpdate} onCancel={closePanel} />
-          </RightPanel>
-        )}
-
-        {panel === 'generator' && (
-          <RightPanel title="Password generator" onClose={closePanel}>
-            <PasswordGenerator />
-          </RightPanel>
-        )}
-
-        {panel === 'templates' && (
-          <RightPanel title="Templates" onClose={closePanel}>
-            <TemplateManager
-              onUse={(id) => {
-                setAddTemplateId(id.startsWith('builtin:') ? undefined : id)
-                setAddTypeOverride(id.startsWith('builtin:') ? (id.slice(8) as EntryType) : undefined)
-                setPanel('add')
-              }}
-            />
-          </RightPanel>
-        )}
-
-        {panel === 'settings' && (
-          <RightPanel title="Settings" onClose={closePanel}>
-            <SettingsPanel onOpenAdmin={onOpenAdmin} />
-          </RightPanel>
-        )}
-
-        {panel === 'none' && selected && (
+        {selected && (
           <CredentialDetail
             entry={selected}
-            template={selected.templateId ? tplById.get(selected.templateId) : undefined}
+            template={templateForEntry(selected, templates)}
             readOnly={readOnly}
             collections={collections}
             onEdit={openEdit}
@@ -1017,7 +1023,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
           />
         )}
 
-        {panel === 'none' && !selected && (
+        {!selected && (
           <div
             style={{
               display: 'flex',
@@ -1034,7 +1040,7 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                 width: 64,
                 height: 64,
                 borderRadius: 16,
-                background: 'color-mix(in srgb, var(--ember-500) 12%, transparent)',
+                background: 'var(--ember-a12)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1054,6 +1060,47 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
           </div>
         )}
       </main>
+
+      {/* ── Pop-out panels (slide in from the right) ── */}
+      <Drawer
+        open={panel !== 'none' && (panel !== 'edit' || !!editing)}
+        title={PANEL_TITLES[panel]}
+        onClose={closePanel}
+        width={drawer.width}
+        resize={{ min: drawer.min, max: drawer.max, onResize: drawer.setWidth, onReset: drawer.reset }}
+      >
+        {panel === 'add' && (
+          <CredentialForm
+            defaultType={addTypeOverride ?? addTypeFor(view)}
+            templates={templates}
+            defaultTemplateId={addTemplateId ?? (view.kind === 'template' ? view.id : undefined)}
+            onSave={handleAdd}
+            onCancel={closePanel}
+          />
+        )}
+
+        {panel === 'edit' && editing && (
+          <CredentialForm initial={editing} templates={templates} onSave={handleUpdate} onCancel={closePanel} />
+        )}
+
+        {panel === 'generator' && (
+          <PasswordGenerator />
+        )}
+
+        {panel === 'templates' && (
+          <TemplateManager
+            onUse={(id) => {
+              setAddTemplateId(id.startsWith('builtin:') ? undefined : id)
+              setAddTypeOverride(id.startsWith('builtin:') ? (id.slice(8) as EntryType) : undefined)
+              setPanel('add')
+            }}
+          />
+        )}
+
+        {panel === 'settings' && (
+          <SettingsPanel onOpenAdmin={onOpenAdmin} />
+        )}
+      </Drawer>
 
       {/* ── Modals ── */}
       <ModalOverlay isOpen={!!recoveryPhrase} isDismissable={false}>
@@ -1082,53 +1129,6 @@ export function VaultDashboard({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
 }
 
 // ─── Right panel wrapper ────────────────────────────────────────────────────────
-
-function RightPanel({
-  title,
-  onClose,
-  children,
-}: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <>
-      <div
-        style={{
-          padding: '14px 20px',
-          borderBottom: '1px solid var(--color-border-secondary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: '1px solid var(--color-border-primary)',
-            background: 'var(--color-bg-secondary)',
-            color: 'var(--color-text-tertiary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: 14,
-          }}
-          aria-label="Close"
-        >
-          <XClose size={15} />
-        </button>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>{children}</div>
-    </>
-  )
-}
 
 // ─── Credential detail view ────────────────────────────────────────────────────
 
@@ -1291,7 +1291,7 @@ function CredentialDetail({
         )}
 
         {ENTRY_TYPES[entry.type].infra && <InfraDetail entry={entry} />}
-        {(entry.templateId || entry.type === 'custom') && <TemplateFieldsView entry={entry} template={template} />}
+        {(template || entry.templateId || entry.type === 'custom') && <TemplateFieldsView entry={entry} template={template} />}
 
         {entry.type === 'passkey' && (
           <>

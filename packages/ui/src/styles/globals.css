@@ -41,6 +41,23 @@ body {
     font-kerning: normal;
 }
 
+/* Base page colours for every app. Without these, text that doesn't set its own
+   colour (e.g. headings) falls back to the browser's black in dark mode. Kept in
+   the base layer so utilities like bg-secondary on <body> still win. */
+@layer base {
+    html {
+        color-scheme: light;
+    }
+    html.dark-mode {
+        /* Native controls (scrollbars, inputs, selects) follow the theme too. */
+        color-scheme: dark;
+    }
+    body {
+        background-color: var(--color-bg-primary);
+        color: var(--color-text-primary);
+    }
+}
+
 /* Hide the default expand arrow on Safari.  */
 details summary::-webkit-details-marker {
     display: none;

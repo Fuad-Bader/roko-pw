@@ -57,7 +57,7 @@ export const styles = sortCx({
         primary: {
             root: [
                 // Roko: flat ember pill with ink text (white on ember fails contrast)
-                "bg-brand-solid text-on-brand ring-1 ring-transparent ring-inset hover:-translate-y-px hover:bg-brand-solid_hover data-loading:bg-brand-solid_hover",
+                "bg-brand-solid text-on-brand ring-1 ring-(--color-brand-solid-ring) ring-inset hover:-translate-y-px hover:bg-brand-solid_hover data-loading:bg-brand-solid_hover",
                 // Icon styles
                 "*:data-icon:text-on-brand/70 hover:*:data-icon:text-on-brand",
             ].join(" "),

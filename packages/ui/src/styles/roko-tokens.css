@@ -33,6 +33,19 @@
   --ember-600: #E8470E;
   --ember-700: #C2390A; /* Accent for small text on light backgrounds */
 
+  /* Ember, by opacity — tints that sit on any surface. Used for selected
+     states, focus rings and dark-mode buttons, where full ember is too loud. */
+  --ember-a04: rgb(255 90 31 / 0.04);
+  --ember-a08: rgb(255 90 31 / 0.08);
+  --ember-a12: rgb(255 90 31 / 0.12);
+  --ember-a16: rgb(255 90 31 / 0.16);
+  --ember-a20: rgb(255 90 31 / 0.20);
+  --ember-a28: rgb(255 90 31 / 0.28);
+  --ember-a40: rgb(255 90 31 / 0.40);
+  --ember-a56: rgb(255 90 31 / 0.56);
+  --ember-a72: rgb(255 90 31 / 0.72);
+  --ember-a88: rgb(255 90 31 / 0.88);
+
   /* Circuit — supporting color for success / "done" states. */
   --circuit-100: #D3F5F1;
   --circuit-500: #12B5A5;

@@ -1,19 +1,18 @@
 import { Hono, type Context } from 'hono'
-import { db, audit, configuredAdminEmails } from '../db.js'
+import { db, audit, configuredAdminEmails, signupPolicy, userCount } from '../db.js'
 import { sendOtpEmail } from '../email.js'
-import { requireAuth, sha256, randomHex, hashPassword, verifyPassword, type AuthUser } from '../middleware/auth.js'
+import { requireAuth, sha256, randomHex, hashPassword, verifyPassword, issueSession, type AuthUser } from '../middleware/auth.js'
 import { isB64 } from '../types.js'
 
 const OTP_TTL_MS = parseInt(process.env.OTP_TTL_MINUTES ?? '15') * 60 * 1000
-const SESSION_TTL_MS = parseInt(process.env.SESSION_TTL_DAYS ?? '30') * 86400 * 1000
 // Max OTP requests per email per 15-minute window
 const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 15 * 60 * 1000
 
 // Org servers are invite-only by default: an admin adds people from the admin
-// console. Set ALLOW_SIGNUPS=true to let any email create an account. The very
-// first account on an empty server can always sign up (and becomes the admin).
-const ALLOW_SIGNUPS = (process.env.ALLOW_SIGNUPS ?? 'false').trim().toLowerCase() === 'true'
+// console, or allows sign-ups there (ALLOW_SIGNUPS in the environment overrides).
+// A new, empty server is claimed through the setup wizard (routes/setup.ts), not
+// here, unless the email is listed in ADMIN_EMAILS.
 
 /**
  * Clients never send the account password. They derive a key from it locally
@@ -38,20 +37,19 @@ function getUser(email: string): UserRow | undefined {
     .get(email) as UserRow | undefined
 }
 
-function userCount(): number {
-  return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n
-}
-
-// An email may authenticate if it already has an (enabled) account, the server
-// accepts signups, or the server has no accounts yet.
+// An email may authenticate if it already has an (enabled) account or the server
+// accepts sign-ups. On an empty server only ADMIN_EMAILS may (the email code
+// proves they own the address); everyone else must use the setup wizard.
 function mayAuthenticate(email: string): boolean {
   const user = getUser(email)
   if (user) return user.status !== 'disabled'
-  return ALLOW_SIGNUPS || userCount() === 0
+  if (userCount() === 0) return configuredAdminEmails().has(email)
+  return signupPolicy().allowSignups
 }
 
 const INVITE_ONLY_ERROR = 'This server is invite-only. Ask your org admin to add you.'
 const DISABLED_ERROR = 'This account has been disabled. Contact your org admin.'
+const SETUP_ERROR = 'This server has not been set up yet. Open its admin console (/admin) to set it up.'
 
 export const authRoutes = new Hono<{ Variables: { user: AuthUser } }>()
 
@@ -119,6 +117,7 @@ async function checkPassword(c: Context, user: UserRow, cred: Credentials): Prom
 
 function blocked(c: Context, email: string): Response | null {
   if (mayAuthenticate(email)) return null
+  if (userCount() === 0) return c.json({ error: SETUP_ERROR, code: 'setup_required' }, 403)
   return c.json({ error: getUser(email)?.status === 'disabled' ? DISABLED_ERROR : INVITE_ONLY_ERROR }, 403)
 }
 
@@ -189,16 +188,9 @@ authRoutes.post('/verify', async (c) => {
   db.prepare('UPDATE auth_requests SET used = 1 WHERE id = ?').run(req.id)
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(now, userId)
 
-  const token = randomHex(32)
-  db.prepare('INSERT INTO sessions (id, token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)').run(
-    randomHex(16),
-    await sha256(token),
-    userId,
-    now,
-    now + SESSION_TTL_MS,
-  )
+  const session = await issueSession(userId)
   audit({ id: userId, email: cred.email }, isNew ? 'account.created' : 'auth.sign_in')
-  return c.json({ token, expiresAt: now + SESSION_TTL_MS })
+  return c.json(session)
 })
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────

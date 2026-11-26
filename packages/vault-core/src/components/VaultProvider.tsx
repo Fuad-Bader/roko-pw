@@ -26,7 +26,7 @@ import type {
 import { decryptData, deriveKey, encryptData, randomSalt, wrapKey, unwrapKey } from '@roko/vault-core/lib/crypto'
 import { loadVault, saveVault, exportVaultToFile, importVaultFromFile } from '@roko/vault-core/lib/storage'
 import { generateMnemonic } from '@roko/vault-core/lib/mnemonic'
-import { emptyVaultData, mergeVaultData, parseVaultData, serializeVaultData } from '@roko/vault-core/lib/templates'
+import { emptyVaultData, isBuiltin, mergeVaultData, parseVaultData, serializeVaultData } from '@roko/vault-core/lib/templates'
 import {
   deriveAccountSecrets,
   generateUserKeys,
@@ -118,6 +118,11 @@ interface VaultContextValue {
   orgSignIn: (serverUrl: string, email: string, password: string) => Promise<{ newAccount: boolean }>
   /** Step 2: verify the emailed code; sets up keys on first sign-in. */
   orgVerify: (otp: string) => Promise<void>
+  /** First-run setup: create the server's first admin with its setup code, then sign in. */
+  orgSetupAdmin: (
+    serverUrl: string,
+    details: { setupCode: string; orgName: string; name: string; email: string; password: string },
+  ) => Promise<void>
   /** Unlock keys for a saved session (after reload or lock). */
   orgUnlock: (password: string) => Promise<void>
   orgSignOut: () => Promise<void>
@@ -631,9 +636,10 @@ export function VaultProvider({ children, forceMode }: { children: ReactNode; fo
       }),
     [commit],
   )
+  /** Delete a custom template, or reset a built-in one (removes its override; item values are kept). */
   const deleteTemplate = useCallback(
     async (id: string) => {
-      const inUse = dataRef.current.entries.filter((e) => e.templateId === id).length
+      const inUse = isBuiltin({ id }) ? 0 : dataRef.current.entries.filter((e) => e.templateId === id).length
       if (inUse) throw new Error(`${inUse} item${inUse === 1 ? ' uses' : 's use'} this template. Delete or move those first.`)
       await commit((d) => ({ ...d, templates: d.templates.filter((x) => x.id !== id) }))
     },
@@ -731,6 +737,33 @@ export function VaultProvider({ children, forceMode }: { children: ReactNode; fo
       setMode('org')
       pendingSignIn.current = null
       await finishOrgUnlock(session, p.privateKeyEncKey)
+    },
+    [finishOrgUnlock],
+  )
+
+  const orgSetupAdmin = useCallback(
+    async (
+      serverUrlRaw: string,
+      d: { setupCode: string; orgName: string; name: string; email: string; password: string },
+    ) => {
+      setError(null)
+      const serverUrl = api.normalizeServerUrl(serverUrlRaw)
+      const email = d.email.trim().toLowerCase()
+      const { authHash, privateKeyEncKey } = await deriveAccountSecrets(email, d.password)
+      const { token, expiresAt } = await api.setup.createAdmin(serverUrl, {
+        setupCode: d.setupCode,
+        orgName: d.orgName,
+        name: d.name,
+        email,
+        authHash,
+      })
+      const session: OrgSession = { serverUrl, token, expiresAt, userId: '', email }
+      session.userId = (await api.me(session)).id
+      store(ORG_SESSION_KEY, session)
+      store(ORG_SERVER_KEY, { serverUrl, email })
+      store(MODE_KEY, 'org')
+      setMode('org')
+      await finishOrgUnlock(session, privateKeyEncKey) // creates the admin's key pair
     },
     [finishOrgUnlock],
   )
@@ -891,6 +924,7 @@ export function VaultProvider({ children, forceMode }: { children: ReactNode; fo
         switchMode,
         orgSignIn,
         orgVerify,
+        orgSetupAdmin,
         orgUnlock,
         orgSignOut,
         refreshOrgVaults,

@@ -1,11 +1,14 @@
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ThemeProvider, useTheme } from '@roko/ui/ThemeProvider'
 import { RokoLogo } from '@roko/ui/RokoLogo'
 import { Button } from '@roko/ui/components/base/buttons/button'
 import { useVault, VaultProvider } from '@roko/vault-core/components/VaultProvider'
 import { OrgSignIn, OrgUnlock } from '@roko/vault-core/components/OrgAccess'
-import { Lock01, LogOut01, Moon01, Sun } from '@untitledui/icons'
+import { AlertTriangle, Lock01, LogOut01, Moon01, RefreshCw01, Sun } from '@untitledui/icons'
+import * as api from '@roko/vault-core/lib/orgApi'
+import type { SetupStatus } from '@roko/vault-core/lib/orgApi'
 import { AdminConsole } from './AdminConsole'
+import { SetupWizard } from './SetupWizard'
 
 /**
  * The console manages the org server it is served from (the server bundles it
@@ -55,15 +58,66 @@ function Shell({ children }: { children: ReactNode }) {
   )
 }
 
+/** Ask the server whether it still needs first-run setup. */
+function useSetupStatus() {
+  const [setup, setSetup] = useState<SetupStatus | 'unreachable' | null>(null)
+  const load = useCallback(() => {
+    api.setup
+      .status(SERVER_URL)
+      .then(setSetup)
+      .catch((err) => {
+        // A server from before the setup wizard has no /api/setup: it is set up.
+        if (err instanceof api.OrgApiError && err.status === 404) setSetup({ state: 'complete', orgName: '', mail: 'smtp' })
+        else setSetup('unreachable')
+      })
+  }, [])
+  useEffect(load, [load])
+  const check = () => {
+    setSetup(null)
+    load()
+  }
+  return { setup, setSetup, check }
+}
+
 function AdminApp() {
   const { status, org, lock, orgSignOut } = useVault()
+  const { setup, setSetup, check } = useSetupStatus()
 
-  if (status === 'checking') return null
+  if (status === 'checking' || setup === null) return null
+
+  if (setup === 'unreachable') {
+    return (
+      <Shell>
+        <p className="roko-eyebrow mb-3.5">Org admin</p>
+        <h1 className="mb-2 text-[30px] font-bold leading-tight">Can&apos;t reach the server</h1>
+        <p className="mb-6 flex items-start gap-2 text-sm text-tertiary">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {SERVER_URL} did not answer. Check that it is running.
+        </p>
+        <Button size="sm" color="secondary" iconLeading={RefreshCw01} onClick={check}>
+          Try again
+        </Button>
+      </Shell>
+    )
+  }
+
+  const finishSetup = () => setSetup({ ...setup, state: 'complete' })
+  const isAdminUnlocked = !!org.privateKey && org.me?.role === 'admin'
+
+  // A brand-new server: claim it. (Any session saved for this address is stale.)
+  if (setup.state === 'needs-admin') return <SetupWizard serverUrl={SERVER_URL} status={setup} onDone={finishSetup} />
+  // Admin exists but the wizard wasn't finished: sign in, then resume it.
+  if (setup.state === 'in-progress' && isAdminUnlocked) {
+    return <SetupWizard serverUrl={SERVER_URL} status={setup} onDone={finishSetup} />
+  }
 
   if (org.phase === 'signed-out') {
     return (
       <Shell>
-        <OrgSignIn fixedServerUrl={SERVER_URL} eyebrow="Org admin" title="Sign in to manage" />
+        <OrgSignIn
+          fixedServerUrl={SERVER_URL}
+          eyebrow={setup.state === 'in-progress' ? 'Finish setup' : 'Org admin'}
+          title={setup.state === 'in-progress' ? 'Sign in to continue setup' : 'Sign in to manage'}
+        />
       </Shell>
     )
   }

@@ -26,11 +26,12 @@ import {
   Download01,
   Eye,
   XClose,
+  Settings01,
 } from '@untitledui/icons'
 import { useVault } from '@roko/vault-core/components/VaultProvider'
 import { RokoLogo } from '@roko/ui/RokoLogo'
 import * as api from '@roko/vault-core/lib/orgApi'
-import type { AdminMember, AdminUser, AdminVault, AuditEvent, OrgSession } from '@roko/vault-core/lib/orgApi'
+import type { AdminMember, AdminUser, AdminVault, AuditEvent, OrgSession, OrgSettings } from '@roko/vault-core/lib/orgApi'
 import {
   decryptVaultV2,
   encryptVaultV2,
@@ -41,8 +42,10 @@ import {
   type EncryptedVaultV2,
 } from '@roko/vault-core/lib/orgCrypto'
 import { emptyVaultData, serializeVaultData } from '@roko/vault-core/lib/templates'
+import { createOrgVault } from './orgActions'
+import { MailStatus, SignupPolicy, Switch } from './controls'
 
-type Tab = 'vaults' | 'people' | 'activity'
+type Tab = 'vaults' | 'people' | 'activity' | 'settings'
 
 const inputCls =
   'w-full rounded-[10px] border border-border-primary bg-primary px-3 py-2 text-sm text-primary outline-none transition placeholder:text-placeholder focus:border-border-brand focus:ring-1 focus:ring-brand'
@@ -57,30 +60,12 @@ function when(ts: number | null) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
-/** On/off switch (button with role=switch). */
-function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={() => onChange(!on)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${on ? 'bg-brand-solid' : 'bg-quaternary'}`}
-    >
-      <span className={`inline-block size-4 rounded-full bg-white shadow-xs transition ${on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-    </button>
-  )
-}
-
-function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'muted' | 'brand' | 'error'; children: React.ReactNode }) {
+export function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'muted' | 'brand' | 'error'; children: React.ReactNode }) {
   const cls = {
     ok: 'bg-success-primary text-success-primary',
     warn: 'bg-warning-primary text-warning-primary',
     muted: 'bg-secondary text-tertiary border border-border-secondary',
-    brand: 'bg-[color-mix(in_srgb,var(--ember-500)_14%,transparent)] text-brand-secondary',
+    brand: 'bg-ember-a16 text-brand-secondary',
     error: 'bg-error-primary text-error-primary',
   }[tone]
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{children}</span>
@@ -98,6 +83,7 @@ export function AdminConsole({ headerActions }: { headerActions?: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [orgName, setOrgName] = useState('')
 
   const flash = (msg: string) => {
     setNotice(msg)
@@ -108,9 +94,10 @@ export function AdminConsole({ headerActions }: { headerActions?: ReactNode }) {
     if (!session) return
     setError('')
     try {
-      const [u, v] = await Promise.all([api.admin.users(session), api.admin.vaults(session)])
+      const [u, v, settings] = await Promise.all([api.admin.users(session), api.admin.vaults(session), api.admin.settings(session)])
       setUsers(u)
       setVaults(v)
+      setOrgName(settings.orgName)
       // Finish grants made before the user had keys (they have signed in since).
       if (privateKey) {
         let done = 0
@@ -169,7 +156,7 @@ export function AdminConsole({ headerActions }: { headerActions?: ReactNode }) {
       <div className="mx-auto w-full max-w-[1180px] flex-1 px-5 py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="roko-eyebrow mb-3">Organization</p>
+            <p className="roko-eyebrow mb-3">{orgName || 'Organization'}</p>
             <h1 className="text-[30px] font-bold leading-tight">Manage access</h1>
           </div>
           <div className="flex gap-1 rounded-full border border-border-primary bg-primary p-1" role="tablist">
@@ -178,6 +165,7 @@ export function AdminConsole({ headerActions }: { headerActions?: ReactNode }) {
                 { id: 'vaults', label: 'Vaults', icon: Lock01, count: vaults.length },
                 { id: 'people', label: 'People', icon: Users01, count: users.length },
                 { id: 'activity', label: 'Activity', icon: Activity },
+                { id: 'settings', label: 'Settings', icon: Settings01 },
               ] as const
             ).map((t) => (
               <button
@@ -219,8 +207,10 @@ export function AdminConsole({ headerActions }: { headerActions?: ReactNode }) {
           <VaultsTab session={session} privateKey={privateKey} meId={me.id} users={users} vaults={vaults} reload={load} setError={setError} flash={flash} />
         ) : tab === 'people' ? (
           <PeopleTab session={session} privateKey={privateKey} meId={me.id} users={users} vaults={vaults} reload={load} setError={setError} flash={flash} />
-        ) : (
+        ) : tab === 'activity' ? (
           <ActivityTab session={session} setError={setError} />
+        ) : (
+          <SettingsTab session={session} email={me.email} setError={setError} flash={flash} onOrgName={setOrgName} />
         )}
       </div>
     </div>
@@ -251,18 +241,8 @@ function VaultsTab({ session, privateKey, meId, users, vaults, reload, setError,
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const key = await generateVaultKey()
-      const blob = await encryptVaultV2(key, serializeVaultData(emptyVaultData()))
       // Admins hold the keys to every org vault.
-      const wrappedKeys: Record<string, string> = {}
-      for (const u of users) {
-        if (u.role === 'admin' && u.status !== 'disabled' && u.publicKey) wrappedKeys[u.id] = await wrapVaultKey(key, u.publicKey)
-      }
-      const { id } = await api.admin.createVault(session, newName.trim(), blob, wrappedKeys)
-      // Admins without keys yet get a pending grant, completed once they sign in.
-      for (const u of users) {
-        if (u.role === 'admin' && u.status !== 'disabled' && !u.publicKey) await api.admin.setMember(session, id, u.id, { canWrite: true, canExport: true })
-      }
+      const id = await createOrgVault(session, newName.trim(), users)
       setNewName('')
       await reload()
       setSelectedId(id)
@@ -291,7 +271,7 @@ function VaultsTab({ session, privateKey, meId, users, vaults, reload, setError,
               type="button"
               onClick={() => setSelectedId(v.id)}
               className={`flex w-full items-center gap-3 border-b border-border-secondary px-4 py-3 text-left transition last:border-b-0 ${
-                v.id === selectedId ? 'bg-[color-mix(in_srgb,var(--ember-500)_10%,transparent)]' : 'hover:bg-primary_hover'
+                v.id === selectedId ? 'bg-ember-a12' : 'hover:bg-primary_hover'
               }`}
             >
               <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[var(--ink-900)] text-[var(--ember-500)]">
@@ -733,6 +713,9 @@ const ACTION_LABELS: Record<string, string> = {
   'access.granted': 'Granted access',
   'access.updated': 'Changed access',
   'access.revoked': 'Removed access',
+  'setup.started': 'Claimed the server and created the admin account',
+  'setup.completed': 'Finished first-run setup',
+  'settings.updated': 'Changed org settings',
 }
 
 function ActivityTab({ session, setError }: { session: OrgSession; setError: (e: string) => void }) {
@@ -795,3 +778,96 @@ function ActivityTab({ session, setError }: { session: OrgSession; setError: (e:
   )
 }
 
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+function SettingsTab({
+  session,
+  email,
+  setError,
+  flash,
+  onOrgName,
+}: {
+  session: OrgSession
+  email: string
+  setError: (e: string) => void
+  flash: (m: string) => void
+  onOrgName: (name: string) => void
+}) {
+  const [settings, setSettings] = useState<OrgSettings | null>(null)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.admin
+      .settings(session)
+      .then((s) => {
+        setSettings(s)
+        setName(s.orgName)
+      })
+      .catch((err) => setError(errText(err, 'Could not load settings.')))
+  }, [session, setError])
+
+  const update = async (patch: { orgName?: string; allowSignups?: boolean }, message: string) => {
+    setSaving(true)
+    try {
+      const s = await api.admin.updateSettings(session, patch)
+      setSettings(s)
+      onOrgName(s.orgName)
+      flash(message)
+    } catch (err) {
+      setError(errText(err, 'Could not save.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!settings) {
+    return (
+      <div className="grid place-items-center py-24">
+        <span className="size-8 animate-spin rounded-full border-2 border-border-primary border-t-brand-solid" />
+      </div>
+    )
+  }
+
+  const section = 'rounded-[16px] border border-border-secondary bg-primary p-5'
+  return (
+    <div className="grid max-w-[720px] gap-4">
+      <form
+        className={section}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (name.trim() && name.trim() !== settings.orgName) void update({ orgName: name.trim() }, 'Organization name saved.')
+        }}
+      >
+        <h2 className="mb-1 text-[15px] font-semibold">Organization</h2>
+        <p className="mb-4 text-[13px] text-tertiary">Shown to everyone who signs in to this server.</p>
+        <label className="mb-1.5 block text-[13px] font-medium text-secondary" htmlFor="settings-org-name">
+          Name
+        </label>
+        <div className="flex gap-2">
+          <input id="settings-org-name" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
+          <Button type="submit" size="sm" color="secondary" isDisabled={saving || !name.trim() || name.trim() === settings.orgName}>
+            Save
+          </Button>
+        </div>
+      </form>
+
+      <section className={section}>
+        <h2 className="mb-1 text-[15px] font-semibold">Who can create an account</h2>
+        <p className="mb-4 text-[13px] text-tertiary">New accounts see no vaults until an admin shares one.</p>
+        <SignupPolicy
+          allowSignups={settings.allowSignups}
+          locked={settings.allowSignupsLocked || saving}
+          onChange={(v) => v !== settings.allowSignups && void update({ allowSignups: v }, v ? 'Anyone can now sign up.' : 'The server is invite-only.')}
+        />
+      </section>
+
+      <section className={section}>
+        <h2 className="mb-1 text-[15px] font-semibold">Email</h2>
+        <p className="mb-4 text-[13px] text-tertiary">Sign-in codes and invitations are sent by email.</p>
+        <MailStatus mail={settings.mail} email={email} onTest={async () => void (await api.admin.testEmail(session))} />
+      </section>
+    </div>
+  )
+}
