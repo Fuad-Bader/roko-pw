@@ -1,0 +1,6 @@
+/* Roko brand fonts, self-hosted (SIL Open Font License 1.1, see ../fonts/*-OFL.txt).
+   Used by the Vite apps and the desktop app. The landing site loads the same
+   families through next/font instead. */
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../fonts/inter-latin-400-700.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("../fonts/space-grotesk-latin-500-700.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap; src: url("../fonts/jetbrains-mono-latin-400-500.woff2") format("woff2"); }

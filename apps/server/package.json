@@ -1,0 +1,25 @@
+{
+  "name": "roko-pw-server",
+  "version": "0.1.0",
+  "description": "RokoPW self-hostable vault server",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "tsc",
+    "start": "node --env-file=.env dist/index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.6.20",
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.0.0",
+    "@types/nodemailer": "^6.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}
